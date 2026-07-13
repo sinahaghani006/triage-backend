@@ -1,0 +1,152 @@
+// Prisma schema — Sprint 1 minimal scope
+// Tables: Users (with authentication fields merged in), Sessions
+// Decision (within backend-core's own authority): UserAuthentication is merged
+// into Users for Sprint 1 to avoid a premature 1:1 join; documented in README
+// under "Design Decisions". Can be split into its own table later without
+// breaking the API contract if the auth data grows (e.g. multiple auth
+// providers, refresh tokens table, etc.)
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev, "rhel-openssl-3.0.x" for Vercel's serverless
+  // function runtime (Amazon Linux based) — without this, prisma generate
+  // on your machine won't produce a binary that runs on Vercel.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  // Neon: use the POOLED connection string here (pgbouncer=true) — required
+  // for serverless functions, which can't hold long-lived direct connections.
+  url       = env("DATABASE_URL")
+  // Neon: the DIRECT (non-pooled) connection string — Prisma Migrate needs
+  // a direct connection, pooled connections don't support it.
+  directUrl = env("DIRECT_URL")
+}
+
+// Mirrors the state machine defined by the project manager:
+// S1 initial_state, S2 collecting_information, S3 assign_urgency,
+// S4 ai_triage_processing, S5 pending_doctor_review, S6 marked_emergency,
+// S7 marked_home_treatment, S8 marked_normal, S9 completed_triage,
+// S10 cancelled_by_user
+enum SessionState {
+  S1_initial_state
+  S2_collecting_information
+  S3_assign_urgency
+  S4_ai_triage_processing
+  S5_pending_doctor_review
+  S6_marked_emergency
+  S7_marked_home_treatment
+  S8_marked_normal
+  S9_completed_triage
+  S10_cancelled_by_user
+}
+
+// Minimal role support (project manager, 2026-07-12): patients self-register
+// via /auth/register (always role=patient). "staff" accounts are created
+// manually via SQL for now (Phase-1 stand-in) — see README section on
+// /sessions/:id/staff-finalize; a real staff management UI/endpoint is
+// Phase 2, out of scope here.
+enum UserRole {
+  patient
+  staff
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  role          UserRole  @default(patient)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  sessions       Session[]
+  patientDetails PatientDetails?
+
+  @@map("users")
+}
+
+// Static demographic data about the patient, captured once at registration.
+// birthDate is the source of truth for age — age is computed server-side at
+// submit-symptoms time rather than being re-entered by the Frontend on every
+// submission (avoids stale/inconsistent ages across sessions).
+model PatientDetails {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  birthDate DateTime @map("birth_date")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("patient_details")
+}
+
+model Session {
+  id                  String        @id @default(uuid())
+  userId              String        @map("user_id")
+  currentState        SessionState  @default(S2_collecting_information) @map("current_state")
+  // Reference only — the PresentingProblems table itself belongs to the AI
+  // member's domain (not designed here), so this is stored as a plain id,
+  // no FK constraint, matching "کارهایی که نباید انجام دهی" in the task brief.
+  presentingProblemId String?       @map("presenting_problem_id")
+  closedAt            DateTime?     @map("closed_at")
+  cancelledAt         DateTime?     @map("cancelled_at")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  triageResult  TriageResult?
+
+  @@map("sessions")
+  @@index([userId])
+}
+
+// AuditLogs: business-level trail of significant actions (register, login,
+// session created/transitioned/finalized/closed/cancelled). userId is
+// optional because some audit-worthy events happen before we know who the
+// user is (e.g. a failed login with an email that doesn't exist).
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+  @@index([userId])
+  @@index([entityType, entityId])
+}
+
+// ErrorLogs: technical/unexpected errors and 5xx AppErrors, captured by the
+// central error handler so nothing is lost to console-only logging.
+model ErrorLog {
+  id         String   @id @default(uuid())
+  code       String?
+  message    String
+  stack      String?
+  path       String?
+  method     String?
+  statusCode Int?     @map("status_code")
+  userId     String?  @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("error_logs")
+}
+
+// One-to-one with Session: the persisted output of the AI module's
+// analysis, written once the session reaches S5-S8 (assign_urgency resolved).
+model TriageResult {
+  id               String   @id @default(uuid())
+  sessionId        String   @unique @map("session_id")
+  urgencyLevel     String   @map("urgency_level")
+  triageResultJson Json     @map("triage_result_json")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("triage_results")
+}
