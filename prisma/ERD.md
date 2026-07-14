@@ -20,6 +20,7 @@ erDiagram
         uuid id PK
         uuid user_id FK "unique"
         date birth_date
+        float weight_kg "mandatory, kg"
         timestamp created_at
         timestamp updated_at
     }
@@ -114,3 +115,9 @@ erDiagram
 
 این‌ها تصمیمات داخلی در محدوده اختیارات من هستند و تغییری در قرارداد JSON با
 اعضای دیگر ایجاد نمی‌کنند.
+
+### `weight_kg` (اجباری، ۱۳ ژوئیه ۲۰۲۶)
+به تصمیم قطعی و نهایی مدیر پروژه، `weight` (کیلوگرم) اجباری در ثبت‌نام شد و
+مثل `birthDate` در `patient_details` ذخیره می‌شه (نه هر بار در
+`submit-symptoms`). فعلاً فقط ذخیره می‌شه؛ ارسال آن به‌عنوان یک `questionId`
+رزروشده جدید به AI هنوز پیاده نشده — منتظر تأیید رسمی قرارداد از عضو AI است.

@@ -29,7 +29,7 @@ describe('POST /auth/register', () => {
       email: 'sara@example.com',
       passwordHash: 'hashed',
       createdAt: new Date(),
-      patientDetails: { birthDate: new Date('1995-06-01') },
+      patientDetails: { birthDate: new Date('1995-06-01'), weightKg: 70 },
     });
 
     const res = await request(app).post('/auth/register').send({
@@ -37,10 +37,12 @@ describe('POST /auth/register', () => {
       email: 'sara@example.com',
       password: 'strongPassword123',
       birthDate: '1995-06-01',
+      weight: 70,
     });
 
     expect(res.status).toBe(201);
     expect(res.body.user.email).toBe('sara@example.com');
+    expect(res.body.user.weightKg).toBe(70);
     expect(res.body.token).toBeDefined();
     expect(res.body.user.passwordHash).toBeUndefined();
 
@@ -58,6 +60,7 @@ describe('POST /auth/register', () => {
       email: 'sara@example.com',
       password: 'strongPassword123',
       birthDate: '1995-06-01',
+      weight: 70,
     });
 
     expect(res.status).toBe(409);
@@ -80,11 +83,25 @@ describe('POST /auth/register', () => {
       name: 'Sara',
       email: 'sara@example.com',
       password: 'strongPassword123',
+      weight: 70,
     });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
     expect(res.body.error.details.some((d) => d.field === 'birthDate')).toBe(true);
+  });
+
+  it('rejects registration missing weight', async () => {
+    const res = await request(app).post('/auth/register').send({
+      name: 'Sara',
+      email: 'sara@example.com',
+      password: 'strongPassword123',
+      birthDate: '1995-06-01',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.details.some((d) => d.field === 'weight')).toBe(true);
   });
 });
 

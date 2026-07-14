@@ -59,12 +59,19 @@ tests/          تست‌های jest + supertest
   "name": "Sara Ahmadi",
   "email": "sara@example.com",
   "password": "strongPassword123",
-  "birthDate": "1995-06-01"
+  "birthDate": "1995-06-01",
+  "weight": 62.5
 }
 ```
 `birthDate` فرمت `YYYY-MM-DD` (ISO 8601)، الزامی، نباید در آینده باشه. در جدول
 جدید `patient_details` ذخیره می‌شه و منبع محاسبه‌ی `age` در
 `submit-symptoms` است (بخش ۸) — Frontend دیگه لازم نیست سن رو جدا بفرسته.
+
+`weight` عدد، **اجباری** (تصمیم مدیر پروژه، ۱۳ ژوئیه ۲۰۲۶)، واحد **کیلوگرم**.
+در `patient_details` ذخیره می‌شه (یک‌بار در ثبت‌نام، مثل `birthDate`، نه هر
+بار در `submit-symptoms`). ⚠️ فعلاً فقط ذخیره می‌شه — هنوز به AI فرستاده
+نمی‌شه، چون قرارداد دقیق (اسم `questionId` رزروشده) هنوز از سمت AI نهایی
+نشده.
 
 **Response `201 Created`:**
 ```json
@@ -74,7 +81,8 @@ tests/          تست‌های jest + supertest
     "name": "Sara Ahmadi",
     "email": "sara@example.com",
     "createdAt": "2026-07-12T10:00:00.000Z",
-    "birthDate": "1995-06-01T00:00:00.000Z"
+    "birthDate": "1995-06-01T00:00:00.000Z",
+    "weightKg": 62.5
   },
   "token": "eyJhbGciOi..."
 }

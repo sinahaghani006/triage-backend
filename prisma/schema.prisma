@@ -71,10 +71,16 @@ model User {
 // birthDate is the source of truth for age — age is computed server-side at
 // submit-symptoms time rather than being re-entered by the Frontend on every
 // submission (avoids stale/inconsistent ages across sessions).
+// weightKg: mandatory (project manager decision, 2026-07-13), captured once
+// at registration alongside birthDate — same rationale as age: one stable
+// value instead of re-asking per session. NOT yet sent to the AI module as
+// a reserved questionId (that requires AI's own confirmation of the exact
+// key/format, still pending) — currently stored only, not consumed anywhere.
 model PatientDetails {
   id        String   @id @default(uuid())
   userId    String   @unique @map("user_id")
   birthDate DateTime @map("birth_date")
+  weightKg  Float    @map("weight_kg")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
