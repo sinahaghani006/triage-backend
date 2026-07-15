@@ -1,0 +1,83 @@
+/**
+ * index.js
+ *
+ * *** طراحی جدید — به دستور صریح مدیر پروژه (سینا). بازسازی نیست. ***
+ * نقطه ورود این ماژول طبق بریف رسمی:
+ *   runAiTriageAnalysis({ sessionId, patientResponses }) -> { urgencyLevel, triageResultJson }
+ *
+ * *** نگاشت home_care (داخلی) → home_treatment (قرارداد خارجی Backend) ***
+ * قانون پروژه: این ماژول داخلاً از 'home_care' استفاده می‌کند (چون
+ * urgencyClassifier.js و URGENCY_ORDER همینطور طراحی شده‌اند)، اما
+ * Backend انتظار 'home_treatment' را دارد. این فایل، نه urgencyClassifier.js،
+ * مسئول این تبدیل نهایی است.
+ *
+ * *** یادآوری فرض طراحی (نگاه کن به aiTriageService.js) ***
+ * امضای رسمی فقط patientResponses را ذکر کرده. این فایل فرض می‌کند
+ * patientResponses یک object با شکل زیر است، نه صرفاً آرایه‌ای از رشته:
+ *   {
+ *     presentingProblemId, age, sex, weightKg,
+ *     questionsAsked: string[],
+ *     responses: string[]
+ *   }
+ * این فرض باید توسط مدیر پروژه تأیید یا اصلاح شود.
+ */
+
+const { runAiTriageAnalysisCore } = require('./aiTriageService');
+
+const INTERNAL_TO_EXTERNAL_URGENCY_MAP = {
+  normal: 'normal',
+  home_care: 'home_treatment', // تنها نگاشت غیر یک‌به‌یک
+  doctor_review: 'doctor_review',
+  emergency: 'emergency',
+};
+
+function mapInternalToExternalUrgency(internalLevel) {
+  const external = INTERNAL_TO_EXTERNAL_URGENCY_MAP[internalLevel];
+  if (!external) {
+    throw new Error(`نگاشت خارجی برای urgency level ناشناخته یافت نشد: ${internalLevel}`);
+  }
+  return external;
+}
+
+/**
+ * نقطه ورود اصلی که Backend صدا می‌زند.
+ * @param {object} params
+ * @param {string} params.sessionId
+ * @param {object} params.patientResponses - نگاه کن به یادداشت فرض طراحی بالا.
+ * @param {function} [params.providerFn] - تزریق provider برای تست با mock؛
+ *   در تولید Backend باید provider واقعی (بر اساس AI_MODEL) را تزریق کند.
+ * @returns {Promise<{ urgencyLevel: string, triageResultJson: object }>}
+ */
+async function runAiTriageAnalysis({ sessionId, patientResponses, providerFn }) {
+  if (!providerFn) {
+    throw new Error(
+      'runAiTriageAnalysis: providerFn الزامی است (mock برای تست، provider واقعی در تولید). ' +
+        'این فایل خودش هیچ provider واقعی‌ای را انتخاب یا import نمی‌کند.'
+    );
+  }
+
+  const patientContext = {
+    presentingProblemId: patientResponses?.presentingProblemId,
+    age: patientResponses?.age,
+    sex: patientResponses?.sex,
+    weightKg: patientResponses?.weightKg,
+    questionsAsked: patientResponses?.questionsAsked || [],
+    patientResponses: patientResponses?.responses || [],
+  };
+
+  const { urgencyLevel, triageResultJson } = await runAiTriageAnalysisCore({
+    sessionId,
+    patientContext,
+    providerFn,
+  });
+
+  return {
+    urgencyLevel: mapInternalToExternalUrgency(urgencyLevel),
+    triageResultJson,
+  };
+}
+
+module.exports = {
+  runAiTriageAnalysis,
+  mapInternalToExternalUrgency,
+};
