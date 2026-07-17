@@ -95,7 +95,7 @@ function getPresentingProblems() {
 // 2026-07-15: reinstates the "ask 3 questions" flow). Contract with AI
 // module still pending exact shape; assumes generateQuestions({
 // presentingProblemId, patientDetails }) -> [{ questionId, text, type }].
-function generateQuestions({ presentingProblemId, patientDetails }) {
+function generateQuestions({ presentingProblemId, age, patientDetails = {} }) {
   let aiModule;
   try {
     aiModule = require("../ai");
@@ -103,21 +103,18 @@ function generateQuestions({ presentingProblemId, patientDetails }) {
     throw new AppError("AI module (src/ai) is not available in this environment yet", 503, "AI_SERVICE_UNAVAILABLE");
   }
 
-  if (typeof aiModule.generateQuestions !== "function") {
-    throw new AppError("src/ai does not export generateQuestions as documented in the contract", 500, "AI_CONTRACT_MISMATCH");
+  if (typeof aiModule.generateTriageQuestions !== "function") {
+    throw new AppError("src/ai does not export generateTriageQuestions as documented in the contract", 500, "AI_CONTRACT_MISMATCH");
   }
 
-  const questions = aiModule.generateQuestions({
+  const providerFn = resolveProviderFn();
+
+  return aiModule.generateTriageQuestions({
     presentingProblemId,
-    age: patientDetails?.age,
-    sex: patientDetails?.gender,
-    weightKg: patientDetails?.weightKg ?? patientDetails?.weight,
+    age,
+    sex: patientDetails.gender,
+    weightKg: patientDetails.weightKg ?? patientDetails.weight,
+    providerFn,
   });
-
-  if (!Array.isArray(questions)) {
-    throw new AppError("AI module returned an unexpected shape from generateQuestions (expected an array)", 502, "AI_RESPONSE_INVALID");
-  }
-
-  return questions;
 }
 module.exports = { runAiTriageAnalysis, toAiPatientResponses, getPresentingProblems, generateQuestions };

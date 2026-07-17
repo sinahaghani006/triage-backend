@@ -78,9 +78,21 @@ async function generateSessionQuestions(req, res, next) {
 
     const { presentingProblemId, patientDetails } = req.body;
 
-    const questions = generateQuestions({ presentingProblemId, patientDetails });
+    const patientRecord = await prisma.patientDetails.findUnique({
+      where: { userId: req.user.id },
+    });
+    if (!patientRecord) {
+      throw new AppError(
+        'No birth date on file for this user; cannot compute age',
+        422,
+        'PATIENT_DETAILS_MISSING',
+      );
+    }
+    const age = calculateAge(patientRecord.birthDate);
 
-    return res.status(200).json({ questions });
+    const result = await generateQuestions({ presentingProblemId, age, patientDetails });
+
+    return res.status(200).json({ questions: result.questions });
   } catch (err) {
     return next(err);
   }
