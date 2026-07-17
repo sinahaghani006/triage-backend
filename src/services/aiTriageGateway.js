@@ -1,12 +1,24 @@
 ﻿const AppError = require("../utils/AppError");
 const { createGroqProvider } = require("../ai/providers/groqProvider");
 
-function resolveProviderFn() {
+function resolveProviderFn(mode = "triage") {
   const aiModel = process.env.AI_MODEL || "";
   const [provider, ...modelParts] = aiModel.split("/");
   const model = modelParts.join("/");
 
   if (provider === "mock") {
+    if (mode === "questions") {
+      return async () => ({
+        rawText: JSON.stringify({
+          questions: [
+            { questionText: "علائم شما از چه زمانی شروع شده؟", options: ["امروز", "۲-۳ روز پیش", "بیش از یک هفته", "بیش از یک ماه"] },
+            { questionText: "شدت درد را چگونه توصیف می‌کنید؟", options: ["خفیف", "متوسط", "شدید"] },
+            { questionText: "آیا تب هم دارید؟", options: ["بله", "خیر", "مطمئن نیستم"] },
+          ],
+        }),
+        meta: { provider: "mock", model: "mock-v1" },
+      });
+    }
     return async () => ({
       rawText: JSON.stringify({
         urgency_suggestion: "normal",
@@ -56,7 +68,7 @@ async function runAiTriageAnalysis({ sessionId, patientResponses }) {
     throw new AppError("src/ai does not export runAiTriageAnalysis as documented in the contract", 500, "AI_CONTRACT_MISMATCH");
   }
 
-  const providerFn = resolveProviderFn();
+  const providerFn = resolveProviderFn("triage");
 
   const result = await aiModule.runAiTriageAnalysis({
     sessionId,
@@ -107,7 +119,7 @@ function generateQuestions({ presentingProblemId, age, patientDetails = {} }) {
     throw new AppError("src/ai does not export generateTriageQuestions as documented in the contract", 500, "AI_CONTRACT_MISMATCH");
   }
 
-  const providerFn = resolveProviderFn();
+  const providerFn = resolveProviderFn("questions");
 
   return aiModule.generateTriageQuestions({
     presentingProblemId,
