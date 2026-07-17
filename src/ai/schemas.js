@@ -73,9 +73,33 @@ const TriageResultSchema = z.object({
   }),
 });
 
+/**
+ * TriageQuestionSchema / TriageQuestionsRawSchema
+ *
+ * *** قابلیت جدید — به دستور صریح مدیر پروژه، برای مدل سؤال‌محور پویا. ***
+ * مرجع: نمونه‌ی هاردکد خود مدیرعامل سینا در بریف اولیه («سه سوال از وی
+ * بپرس... در قالب جیسان»). این schema پاسخ خام AI را برای مرحله‌ی تولید
+ * سؤال (قبل از submit-symptoms نهایی) اعتبارسنجی می‌کند — کاملاً جدا از
+ * AIRawResponseSchema که برای مرحله‌ی تشخیص نهایی urgency است.
+ *
+ * تعداد گزینه‌ها (۲ تا ۴) در schema چک می‌شود؛ تعداد دقیق سؤالات (همیشه ۳)
+ * چون این شبیه‌ساز zod از .length() پشتیبانی نمی‌کند، در aiTriageService.js
+ * به‌صورت جداگانه و صریح چک و در صورت نقض خطا پرتاب می‌شود.
+ */
+const TriageQuestionSchema = z.object({
+  questionText: z.string().min(1),
+  options: z.array(z.string().min(1)).min(2).max(4),
+});
+
+const TriageQuestionsRawSchema = z.object({
+  questions: z.array(TriageQuestionSchema),
+});
+
 module.exports = {
   URGENCY_LEVELS,
   PatientContextSchema,
   AIRawResponseSchema,
   TriageResultSchema,
+  TriageQuestionSchema,
+  TriageQuestionsRawSchema,
 };

@@ -22,8 +22,8 @@
  * این فرض باید توسط مدیر پروژه تأیید یا اصلاح شود.
  */
 
-const { runAiTriageAnalysisCore } = require('./aiTriageService');
-
+const { runAiTriageAnalysisCore, generateTriageQuestionsCore } = require('./aiTriageService');
+const { getPresentingProblemsList } = require('./presentingProblems');
 const INTERNAL_TO_EXTERNAL_URGENCY_MAP = {
   normal: 'normal',
   home_care: 'home_treatment', // تنها نگاشت غیر یک‌به‌یک
@@ -80,4 +80,34 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, providerFn }) 
 module.exports = {
   runAiTriageAnalysis,
   mapInternalToExternalUrgency,
+  generateTriageQuestions,
+  getPresentingProblemsList,
 };
+/**
+ * *** قابلیت جدید — نقطه ورود مرحله‌ی تولید سؤال پویا. ***
+ * به دستور صریح مدیر پروژه، برای فراخوانی بعد از انتخاب شکایت توسط
+ * بیمار، قبل از submit-symptoms نهایی. این تابع runAiTriageAnalysis
+ * موجود را جایگزین یا تغییر نمی‌دهد — کاملاً مستقل و جداست.
+ *
+ * خروجی مستقیماً قابل نمایش در UI است: آرایه‌ای از ۳ سؤال، هرکدام با
+ * متن سؤال و آرایه‌ی گزینه‌ها.
+ *
+ * *** تصمیم طراحی: در صورت خطای AI/provider/validation، این تابع خطا
+ * را throw می‌کند، نه fallback خاموش. Backend باید تصمیم بگیرد در این
+ * حالت چه کند (مثلاً رد شدن از این مرحله). ***
+ *
+ * @param {object} params
+ * @param {string} params.presentingProblemId
+ * @param {string} [params.initialDescription]
+ * @param {number} params.age
+ * @param {'male'|'female'} params.sex
+ * @param {number} params.weightKg
+ * @param {function} params.providerFn
+ * @returns {Promise<{ questions: Array<{questionText: string, options: string[]}> }>}
+ */
+async function generateTriageQuestions({ presentingProblemId, initialDescription, age, sex, weightKg, providerFn }) {
+  if (!providerFn) {
+    throw new Error('generateTriageQuestions: providerFn الزامی است (mock برای تست، provider واقعی در تولید).');
+  }
+  return generateTriageQuestionsCore({ presentingProblemId, initialDescription, age, sex, weightKg, providerFn });
+}

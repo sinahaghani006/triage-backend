@@ -49,7 +49,7 @@ function setAuthCookie(res, token) {
 // POST /auth/register
 async function register(req, res, next) {
   try {
-    const { name, email, password, birthDate, weight } = req.body;
+    const { name, email, password, birthDate } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -65,7 +65,7 @@ async function register(req, res, next) {
         name,
         email,
         passwordHash,
-        patientDetails: { create: { birthDate: new Date(birthDate), weightKg: weight } },
+        patientDetails: { create: { birthDate: new Date(birthDate) } },
       },
       include: { patientDetails: true },
     });

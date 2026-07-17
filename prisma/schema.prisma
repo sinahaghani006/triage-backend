@@ -80,7 +80,7 @@ model PatientDetails {
   id        String   @id @default(uuid())
   userId    String   @unique @map("user_id")
   birthDate DateTime @map("birth_date")
-  weightKg  Float    @map("weight_kg")
+  weightKg  Float?    @map("weight_kg")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -101,7 +101,7 @@ model Session {
   cancelledAt         DateTime?     @map("cancelled_at")
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
-
+   feedback      PatientFeedback?
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   triageResult  TriageResult?
 
@@ -155,4 +155,21 @@ model TriageResult {
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@map("triage_results")
+}
+
+// One-to-one with Session: patient's post-triage feedback (rating 1-5 +
+// optional comment). Only allowed once triage reaches S9_completed_triage
+// (project manager decision, 2026-07-15). upsert-based: one record per
+// session, resubmission overwrites rather than creating a new row.
+model PatientFeedback {
+  id        String   @id @default(uuid())
+  sessionId String   @unique @map("session_id")
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("patient_feedback")
 }

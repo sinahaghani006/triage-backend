@@ -1,5 +1,4 @@
-const { body } = require('express-validator');
-
+﻿const { body } = require('express-validator');
 const registerValidator = [
   body('name')
     .trim()
@@ -18,11 +17,7 @@ const registerValidator = [
     .isISO8601().withMessage('birthDate must be a valid date (YYYY-MM-DD)')
     .custom((value) => new Date(value) <= new Date())
     .withMessage('birthDate cannot be in the future'),
-  body('weight')
-    .notEmpty().withMessage('weight is required')
-    .isFloat({ min: 1, max: 500 }).withMessage('weight must be a valid number of kilograms'),
 ];
-
 const loginValidator = [
   body('email')
     .trim()
@@ -32,5 +27,4 @@ const loginValidator = [
   body('password')
     .notEmpty().withMessage('password is required'),
 ];
-
 module.exports = { registerValidator, loginValidator };

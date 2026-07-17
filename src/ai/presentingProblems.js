@@ -1,21 +1,19 @@
 /**
  * presentingProblems.js
  *
- * *** فقط اسکلت ساختاری — محتوای بالینی هنوز تکمیل نشده. ***
+ * *** نسخه‌ی دمو — نه لیست نهایی. ***
  *
- * بریف رسمی گفته: «فهرست شکایات رایج — تعداد دقیق آیتم‌ها نامشخص است، بین
- * ۳۲ تا ۳۷، نیازمند تأیید با منبع واقعی، حدس نزن.»
+ * به دستور مدیر پروژه (سینا)، برای یک دموی سریع به مدیرعامل، این لیست از
+ * ۳ آیتم placeholder به ۱۵ مورد رایج و عمومی گسترش یافت. این هنوز لیست
+ * نهایی ۳۲-۳۷ موردی که بریف اصلی خواسته بود نیست — فقط برای دمو کافی است.
  *
- * این فایل عمداً یک لیست کامل نمی‌سازد، چون این محتوای پزشکی است (نه
- * معماری) و ساختن یک لیست ۳۲-۳۷ تایی حدسی از شکایات بالینی دقیقاً همان
- * ریسکی است که این پروژه صریحاً منع کرده — یک فهرست ساختگی که شبیه واقعیت
- * به‌نظر می‌رسد.
+ * این ۱۵ مورد صرفاً «برچسب دسته‌بندی شکایت» هستند (سطحی که در سیستم‌های
+ * غربالگری عمومی مثل NHS 111 هم دیده می‌شود) — نه توصیه‌ی درمانی، نه
+ * تشخیص، نه دوز دارویی. هیچ محتوای بالینی فراتر از نام و مترادف اضافه
+ * نشده است.
  *
- * فقط ۲ آیتم نمونه، به‌وضوح مشخص‌شده به‌عنوان placeholder برای تست ساختار،
- * اضافه شده است — نه به‌عنوان لیست نهایی.
- *
- * *** پیش از استفاده در تولید، این فایل باید توسط مشاور پزشکی یا مدیر
- * پروژه با لیست کامل و تأییدشده جایگزین شود. ***
+ * *** پیش از اتصال به بیمار واقعی، این لیست باید توسط مشاور پزشکی یا
+ * مدیر پروژه با نسخه‌ی کامل و تأییدشده جایگزین شود. ***
  */
 
 /**
@@ -27,34 +25,31 @@
  */
 
 /** @type {PresentingProblem[]} */
-const PLACEHOLDER_PRESENTING_PROBLEMS = [
-  {
-    id: 'sore_throat',
-    labelFa: 'گلودرد',
-    synonyms: [],
-    _placeholder: true,
-  },
-  {
-    id: 'headache',
-    labelFa: 'سردرد',
-    synonyms: [],
-    _placeholder: true,
-  },
-  {
-    id: 'chest_pain',
-    labelFa: 'درد قفسه سینه',
-    synonyms: [],
-    _placeholder: true,
-  },
+const DEMO_PRESENTING_PROBLEMS = [
+  { id: 'sore_throat', labelFa: 'گلودرد', synonyms: ['درد گلو'] },
+  { id: 'headache', labelFa: 'سردرد', synonyms: [] },
+  { id: 'chest_pain', labelFa: 'درد قفسه سینه', synonyms: ['درد سینه'] },
+  { id: 'fever', labelFa: 'تب', synonyms: ['تب و لرز'] },
+  { id: 'cough', labelFa: 'سرفه', synonyms: [] },
+  { id: 'abdominal_pain', labelFa: 'درد شکم', synonyms: ['دل‌درد'] },
+  { id: 'back_pain', labelFa: 'کمردرد', synonyms: [] },
+  { id: 'skin_rash', labelFa: 'جوش یا بثورات پوستی', synonyms: ['کهیر', 'راش پوستی'] },
+  { id: 'diarrhea', labelFa: 'اسهال', synonyms: [] },
+  { id: 'dizziness', labelFa: 'سرگیجه', synonyms: ['گیجی'] },
+  { id: 'urinary_symptoms', labelFa: 'علائم ادراری', synonyms: ['سوزش ادرار', 'تکرر ادرار'] },
+  { id: 'eye_redness', labelFa: 'قرمزی یا درد چشم', synonyms: [] },
+  { id: 'ear_pain', labelFa: 'گوش‌درد', synonyms: [] },
+  { id: 'nausea_vomiting', labelFa: 'تهوع یا استفراغ', synonyms: ['حالت تهوع'] },
+  { id: 'minor_injury', labelFa: 'آسیب یا زخم سطحی', synonyms: ['بریدگی', 'کوفتگی'] },
 ];
 
 /**
- * برگرداندن لیست کامل شکایات رایج.
- * *** هشدار: در حال حاضر placeholder است، نه لیست نهایی تأییدشده. ***
+ * برگرداندن لیست شکایات رایج.
+ * *** هشدار: این لیست دمو است، نه لیست نهایی تأییدشده (۱۵ مورد از ۳۲-۳۷ مورد). ***
  * @returns {PresentingProblem[]}
  */
 function getPresentingProblemsList() {
-  return PLACEHOLDER_PRESENTING_PROBLEMS;
+  return DEMO_PRESENTING_PROBLEMS;
 }
 
 /**
@@ -63,12 +58,12 @@ function getPresentingProblemsList() {
  * @returns {PresentingProblem|undefined}
  */
 function findPresentingProblemById(id) {
-  return PLACEHOLDER_PRESENTING_PROBLEMS.find((p) => p.id === id);
+  return DEMO_PRESENTING_PROBLEMS.find((p) => p.id === id);
 }
 
 module.exports = {
   getPresentingProblemsList,
   findPresentingProblemById,
-  // صادر شده تا مصرف‌کننده‌ها (تست‌ها، مدیر پروژه) به‌وضوح ببینند placeholder است:
-  PLACEHOLDER_PRESENTING_PROBLEMS,
+  DEMO_PRESENTING_PROBLEMS,
 };
+

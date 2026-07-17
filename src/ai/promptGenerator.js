@@ -88,7 +88,83 @@ ${qaLines ? `سوابق پرسش و پاسخ:\n${qaLines}` : 'هنوز هیچ س
   };
 }
 
+/**
+ * *** قابلیت جدید — مدل سؤال‌محور پویا، به دستور صریح مدیر پروژه. ***
+ * مرجع دقیق: نمونه‌ی هاردکد خود مدیرعامل سینا در بریف اولیه:
+ * «شخصی به ما مراجعه کرده که سن او ۲۹ سال و وزن او ۷۵ کیلو و جنس او مرد
+ * است، توضیح اولیه که به ما داده روزی سه ساعت سردرد دارد، برای این
+ * موضوع با نقش تریاژ آنلاین سه سوال از وی بپرس تا پاسخ دهد و آن سه سوال
+ * رو در قالب جیسان به من بده»
+ *
+ * موضوعات نمونه (شدت/مدت/علائم همراه) که مدیر پروژه قبلاً مثال زده بود
+ * صرفاً نمونه‌اند، نه اسکریپت ثابت — این پرامپت از AI می‌خواهد بر اساس
+ * شکایت خاص هر بیمار، سؤالات بالینی مرتبط را خودش تولید کند.
+ */
+const QUESTIONS_SYSTEM_INSTRUCTIONS = `
+تو یک دستیار غربالگری بالینی هستی، نه یک پزشک. وظیفه‌ات این است که بر
+اساس شکایت اولیه‌ی بیمار، دقیقاً ۳ سؤال بالینی مرتبط و مفید برای
+تصمیم‌گیری بعدی طراحی کنی — نه سؤالات عمومی یا نامرتبط.
+
+هر سؤال باید چندگزینه‌ای باشد (بین ۲ تا ۴ گزینه)، نه متن آزاد، تا بیمار
+به‌سادگی بتواند از بین گزینه‌ها انتخاب کند.
+
+سؤالات را بر اساس نوع شکایت خودت طراحی کن (مثلاً برای سردرد ممکن است
+شدت، مدت، یا علائم همراه مثل تب/تهوع مرتبط باشد؛ برای شکایت دیگر ممکن
+است سؤالات کاملاً متفاوتی مناسب‌تر باشد) — همیشه سؤالات را به شکایت خاص
+بیمار مرتبط نگه‌دار.
+
+خروجی تو باید دقیقاً یک شیء JSON با این ساختار باشد و هیچ متن دیگری
+(توضیح، markdown) نداشته باشد:
+
+{
+  "questions": [
+    { "questionText": "متن سؤال ۱", "options": ["گزینه۱", "گزینه۲", "..."] },
+    { "questionText": "متن سؤال ۲", "options": ["گزینه۱", "گزینه۲", "..."] },
+    { "questionText": "متن سؤال ۳", "options": ["گزینه۱", "گزینه۲", "..."] }
+  ]
+}
+
+قوانین:
+- دقیقاً ۳ سؤال، نه کمتر نه بیشتر.
+- هر سؤال بین ۲ تا ۴ گزینه.
+- هیچ تشخیص یا توصیه‌ی درمانی در این مرحله نده — فقط سؤال بپرس.
+`.trim();
+
+/**
+ * تولید prompt برای مرحله‌ی تولید سؤال (قبل از submit-symptoms نهایی).
+ * @param {object} params
+ * @param {string} params.presentingProblemId
+ * @param {string} [params.initialDescription] - توضیح اولیه‌ی بیمار (مثل «روزی سه ساعت سردرد دارد»)
+ * @param {number} params.age
+ * @param {'male'|'female'} params.sex
+ * @param {number} params.weightKg
+ * @returns {{ system: string, user: string }}
+ */
+function generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg }) {
+  if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
+    throw new Error('generateQuestionsPrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
+  }
+
+  const userContent = `
+شکایت اصلی (presenting_problem_id): ${presentingProblemId}
+سن: ${age}
+جنس: ${sex === 'male' ? 'مرد' : 'زن'}
+وزن: ${weightKg} کیلوگرم
+توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}
+
+بر اساس این شکایت، طبق فرمت خواسته‌شده در دستورالعمل سیستم، دقیقاً ۳
+سؤال چندگزینه‌ای مرتبط طراحی کن.
+`.trim();
+
+  return {
+    system: QUESTIONS_SYSTEM_INSTRUCTIONS,
+    user: userContent,
+  };
+}
+
 module.exports = {
   generateTriagePrompt,
   SYSTEM_INSTRUCTIONS,
+  generateQuestionsPrompt,
+  QUESTIONS_SYSTEM_INSTRUCTIONS,
 };

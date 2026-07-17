@@ -4,7 +4,7 @@ const { canTransition, resolveStateForUrgency, AUTO_FINALIZE_STATES } = require(
 const { runAiTriageAnalysis } = require('../services/aiTriageGateway');
 const { recordAudit } = require('../services/auditLogService');
 const calculateAge = require('../utils/calculateAge');
-
+const { generateQuestions } = require('../services/aiTriageGateway');
 function toPublicSession(session) {
   return {
     id: session.id,
@@ -59,7 +59,32 @@ async function createSession(req, res, next) {
     return next(err);
   }
 }
+// POST /sessions/:id/generate-questions
+// Stays in S2_collecting_information — does not transition state, just
+// returns AI-generated follow-up questions for the Frontend to ask before
+// calling submit-symptoms with the answers.
+async function generateSessionQuestions(req, res, next) {
+  const sessionId = req.params.id;
+  try {
+    const session = await loadOwnedSessionOr404(sessionId, req.user.id);
 
+    if (session.currentState !== 'S2_collecting_information') {
+      throw new AppError(
+        `Cannot generate questions from state ${session.currentState}`,
+        409,
+        'INVALID_STATE_TRANSITION',
+      );
+    }
+
+    const { presentingProblemId, patientDetails } = req.body;
+
+    const questions = generateQuestions({ presentingProblemId, patientDetails });
+
+    return res.status(200).json({ questions });
+  } catch (err) {
+    return next(err);
+  }
+}
 // GET /sessions/:id
 async function getSession(req, res, next) {
   try {
@@ -291,7 +316,44 @@ async function cancelSession(req, res, next) {
     return next(err);
   }
 }
+// POST /sessions/:id/feedback
+// Only allowed once triage is fully completed (S9). One feedback per
+// session — resubmission overwrites via upsert (project manager
+// decision, 2026-07-15).
+async function submitFeedback(req, res, next) {
+  const sessionId = req.params.id;
+  try {
+    const session = await loadOwnedSessionOr404(sessionId, req.user.id);
 
+    if (session.currentState !== 'S9_completed_triage') {
+      throw new AppError(
+        'Feedback can only be submitted after triage is completed',
+        409,
+        'SESSION_NOT_COMPLETED',
+      );
+    }
+
+    const { rating, comment } = req.body;
+
+    const feedback = await prisma.patientFeedback.upsert({
+      where: { sessionId },
+      create: { sessionId, rating, comment },
+      update: { rating, comment },
+    });
+
+    recordAudit({
+      userId: req.user.id,
+      action: 'session_feedback_submitted',
+      entityType: 'Session',
+      entityId: sessionId,
+      metadata: { rating },
+    });
+
+    return res.status(200).json({ feedback });
+  } catch (err) {
+    return next(err);
+  }
+}
 module.exports = {
   createSession,
   getSession,
@@ -300,4 +362,6 @@ module.exports = {
   staffFinalizeReview,
   closeSession,
   cancelSession,
+  submitFeedback,
+  generateSessionQuestions,
 };

@@ -11,7 +11,7 @@
  * urgencyClassifier.js سپرده شده (طبق قانون طلایی #۳: هر خطا => doctor_review).
  */
 
-const { AIRawResponseSchema } = require('./schemas');
+const { AIRawResponseSchema, TriageQuestionsRawSchema } = require('./schemas');
 
 class ResponseValidationError extends Error {
   constructor(message, { cause, code, rawText } = {}) {
@@ -63,4 +63,38 @@ module.exports = {
   ResponseValidationError,
   safeParseJson,
   validateAIResponse,
+  validateQuestionsResponse,
 };
+
+/**
+ * *** قابلیت جدید — اعتبارسنجی پاسخ مرحله‌ی تولید سؤال پویا. ***
+ * جدا از validateAIResponse چون schema و مرحله‌ی جریان کاملاً متفاوتند.
+ * علاوه بر schema (تعداد گزینه‌ها ۲-۴)، تعداد دقیق سؤالات (همیشه ۳) را
+ * هم اینجا صریحاً چک می‌کند — چون شبیه‌ساز zod محلی از .length() پشتیبانی
+ * نمی‌کرد؛ با zod واقعی هم این چک اضافی بی‌ضرر و فقط برای اطمینان مضاعف است.
+ *
+ * @param {string} rawText
+ * @returns {{ questions: Array<{questionText: string, options: string[]}> }}
+ * @throws {ResponseValidationError}
+ */
+function validateQuestionsResponse(rawText) {
+  const parsed = safeParseJson(rawText);
+
+  const result = TriageQuestionsRawSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new ResponseValidationError('پاسخ AI با قرارداد سؤالات (TriageQuestionsRawSchema) مطابقت ندارد.', {
+      code: 'QUESTIONS_SCHEMA_MISMATCH',
+      cause: result.error,
+      rawText,
+    });
+  }
+
+  if (result.data.questions.length !== 3) {
+    throw new ResponseValidationError(
+      `تعداد سؤالات باید دقیقاً ۳ باشد، ولی AI ${result.data.questions.length} سؤال برگرداند.`,
+      { code: 'QUESTIONS_COUNT_MISMATCH', rawText }
+    );
+  }
+
+  return result.data;
+}

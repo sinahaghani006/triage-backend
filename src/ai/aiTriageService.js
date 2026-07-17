@@ -19,9 +19,9 @@
  * وابستگی خاص قفل نشود.
  */
 
-const { generateTriagePrompt } = require('./promptGenerator');
+const { generateTriagePrompt, generateQuestionsPrompt } = require('./promptGenerator');
 const { callAIProvider, AIConnectorError } = require('./aiConnector');
-const { validateAIResponse, ResponseValidationError } = require('./responseValidator');
+const { validateAIResponse, validateQuestionsResponse, ResponseValidationError } = require('./responseValidator');
 const {
   buildTriageResultFromAI,
   buildFallbackTriageResult,
@@ -119,4 +119,41 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
 
 module.exports = {
   runAiTriageAnalysisCore,
+  generateTriageQuestionsCore,
 };
+
+/**
+ * *** قابلیت جدید — orchestrator مرحله‌ی تولید سؤال پویا. ***
+ * به دستور صریح مدیر پروژه، بر اساس نمونه‌ی هاردکد مدیرعامل سینا.
+ *
+ * *** تصمیم طراحی مهم که باید تأیید شود: در صورت خطا (AIConnectorError یا
+ * ResponseValidationError)، این تابع بر خلاف runAiTriageAnalysisCore،
+ * fallback نمی‌سازد — خطا را مستقیماً بالا می‌فرستد (throw می‌کند). ***
+ * دلیل: تولید سؤالات بالینی جعلی وقتی AI شکست خورده، همان ریسک ساختن
+ * محتوای بالینی حدسی است که در کل این پروژه ممنوع شده. تصمیم گرفتن
+ * درباره‌ی این‌که Backend در این حالت چه کند (مثلاً رد شدن از این مرحله
+ * و رفتن مستقیم به submit-symptoms) باید توسط مدیر پروژه مشخص شود.
+ *
+ * @param {object} params
+ * @param {string} params.presentingProblemId
+ * @param {string} [params.initialDescription]
+ * @param {number} params.age
+ * @param {'male'|'female'} params.sex
+ * @param {number} params.weightKg
+ * @param {function} params.providerFn
+ * @returns {Promise<{ questions: Array<{questionText: string, options: string[]}> }>}
+ * @throws {AIConnectorError | ResponseValidationError}
+ */
+async function generateTriageQuestionsCore({
+  presentingProblemId,
+  initialDescription,
+  age,
+  sex,
+  weightKg,
+  providerFn,
+}) {
+  const prompt = generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg });
+  const providerResult = await callAIProvider(prompt, providerFn);
+  const validated = validateQuestionsResponse(providerResult.rawText);
+  return validated;
+}
