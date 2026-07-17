@@ -24,11 +24,30 @@ class ResponseValidationError extends Error {
 }
 
 /**
+ * *** لایه‌ی دفاعی جدید — به دستور صریح مدیر پروژه. ***
+ * حتی وقتی provider با response_format روی JSON mode تنظیم شده، بعضی
+ * وقت‌ها متن اضافه (مثل ```json ... ``` code fence، یا فاصله‌ی اضافه)
+ * دور خروجی می‌ذارد. این تابع قبل از JSON.parse، چنین بسته‌بندی‌ای را
+ * در صورت وجود حذف می‌کند — این جایگزین تنظیم response_format در
+ * provider نیست، فقط یک لایه‌ی دفاعی اضافه است.
+ */
+function stripCodeFenceWrapper(rawText) {
+  if (typeof rawText !== 'string') return rawText;
+  const trimmed = rawText.trim();
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+  return trimmed;
+}
+
+/**
  * parse امن متن خام به JSON، بدون فرض بر ساختار.
  */
 function safeParseJson(rawText) {
+  const cleaned = stripCodeFenceWrapper(rawText);
   try {
-    return JSON.parse(rawText);
+    return JSON.parse(cleaned);
   } catch (err) {
     throw new ResponseValidationError('پاسخ AI یک JSON معتبر نیست.', {
       code: 'INVALID_JSON',
