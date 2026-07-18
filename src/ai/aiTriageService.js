@@ -50,6 +50,7 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
     weightKg,
     questionsAsked = [],
     patientResponses = [],
+    patientHistory = [],
   } = patientContext;
 
   let triageResult;
@@ -62,6 +63,7 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
       weightKg,
       questionsAsked,
       patientResponses,
+      patientHistory,
     });
 
     const providerResult = await callAIProvider(prompt, providerFn);
@@ -140,6 +142,7 @@ module.exports = {
  * @param {number} params.age
  * @param {'male'|'female'} params.sex
  * @param {number} params.weightKg
+ * @param {Array} [params.patientHistory]
  * @param {function} params.providerFn
  * @returns {Promise<{ questions: Array<{questionText: string, options: string[]}> }>}
  * @throws {AIConnectorError | ResponseValidationError}
@@ -150,9 +153,10 @@ async function generateTriageQuestionsCore({
   age,
   sex,
   weightKg,
+  patientHistory = [],
   providerFn,
 }) {
-  const prompt = generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg });
+  const prompt = generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory });
   const providerResult = await callAIProvider(prompt, providerFn);
   const validated = validateQuestionsResponse(providerResult.rawText);
   return validated;

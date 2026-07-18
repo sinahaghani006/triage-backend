@@ -23,7 +23,7 @@
  */
 
 const { runAiTriageAnalysisCore, generateTriageQuestionsCore } = require('./aiTriageService');
-const { getPresentingProblemsList } = require('./presentingProblems');
+
 const INTERNAL_TO_EXTERNAL_URGENCY_MAP = {
   normal: 'normal',
   home_care: 'home_treatment', // تنها نگاشت غیر یک‌به‌یک
@@ -63,6 +63,7 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, providerFn }) 
     weightKg: patientResponses?.weightKg,
     questionsAsked: patientResponses?.questionsAsked || [],
     patientResponses: patientResponses?.responses || [],
+    patientHistory: patientResponses?.patientHistory || [],
   };
 
   const { urgencyLevel, triageResultJson } = await runAiTriageAnalysisCore({
@@ -81,8 +82,8 @@ module.exports = {
   runAiTriageAnalysis,
   mapInternalToExternalUrgency,
   generateTriageQuestions,
-  getPresentingProblemsList,
 };
+
 /**
  * *** قابلیت جدید — نقطه ورود مرحله‌ی تولید سؤال پویا. ***
  * به دستور صریح مدیر پروژه، برای فراخوانی بعد از انتخاب شکایت توسط
@@ -102,12 +103,13 @@ module.exports = {
  * @param {number} params.age
  * @param {'male'|'female'} params.sex
  * @param {number} params.weightKg
+ * @param {Array} [params.patientHistory] - خلاصه‌ی حداکثر ۵ مراجعه‌ی اخیر بیمار (فقط relativeDate, previousComplaint, outcome, recommendationSummary - هرگز داده‌ی هویتی)
  * @param {function} params.providerFn
  * @returns {Promise<{ questions: Array<{questionText: string, options: string[]}> }>}
  */
-async function generateTriageQuestions({ presentingProblemId, initialDescription, age, sex, weightKg, providerFn }) {
+async function generateTriageQuestions({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory = [], providerFn }) {
   if (!providerFn) {
     throw new Error('generateTriageQuestions: providerFn الزامی است (mock برای تست، provider واقعی در تولید).');
   }
-  return generateTriageQuestionsCore({ presentingProblemId, initialDescription, age, sex, weightKg, providerFn });
+  return generateTriageQuestionsCore({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory, providerFn });
 }

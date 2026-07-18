@@ -18,6 +18,42 @@
 
 const { URGENCY_LEVELS } = require('./schemas');
 
+/**
+ * *** قابلیت جدید — پشتیبانی از patientHistory، به دستور صریح مدیر پروژه. ***
+ *
+ * *** قرارداد حریم خصوصی — حیاتی: ***
+ * این تابع عمداً فقط ۴ فیلد مشخص را از هر ورودی می‌خواند: relativeDate،
+ * previousComplaint، outcome، recommendationSummary. هر فیلد دیگری که
+ * Backend ممکن است به‌اشتباه اضافه کند (مثلاً نام یا کد ملی بیمار)
+ * نادیده گرفته می‌شود، چون اصلاً خوانده نمی‌شود — نه اینکه فیلتر شود.
+ * این یک لایه‌ی دفاعی است، نه جایگزین مسئولیت Backend برای عدم ارسال
+ * داده‌ی هویتی از همان ابتدا.
+ *
+ * حداکثر ۵ مورد پردازش می‌شود؛ مواردی بیشتر از ۵ نادیده گرفته می‌شوند.
+ *
+ * @param {Array<{relativeDate?: string, previousComplaint?: string, outcome?: string, recommendationSummary?: string}>} [patientHistory]
+ * @returns {string} متن قالب‌بندی‌شده برای درج در prompt، یا رشته‌ی خالی اگر سابقه‌ای نباشد.
+ */
+function formatPatientHistory(patientHistory) {
+  if (!Array.isArray(patientHistory) || patientHistory.length === 0) {
+    return '';
+  }
+
+  const entries = patientHistory.slice(0, 5).map((entry, i) => {
+    const relativeDate = typeof entry?.relativeDate === 'string' ? entry.relativeDate : 'تاریخ نامشخص';
+    const previousComplaint =
+      typeof entry?.previousComplaint === 'string' ? entry.previousComplaint : 'نامشخص';
+    const outcome = typeof entry?.outcome === 'string' ? entry.outcome : 'نامشخص';
+    const recommendationSummary =
+      typeof entry?.recommendationSummary === 'string' && entry.recommendationSummary.trim() !== ''
+        ? ` | خلاصه: ${entry.recommendationSummary}`
+        : '';
+    return `${i + 1}. [${relativeDate}] شکایت: ${previousComplaint} | نتیجه: ${outcome}${recommendationSummary}`;
+  });
+
+  return entries.join('\n');
+}
+
 const SYSTEM_INSTRUCTIONS = `
 تو یک دستیار غربالگری بالینی هستی، نه یک پزشک. وظیفه‌ات فقط طبقه‌بندی
 اولیه‌ی فوریت بر اساس اطلاعات داده‌شده است، نه تشخیص یا تجویز درمان.
@@ -36,6 +72,13 @@ const SYSTEM_INSTRUCTIONS = `
 صریحاً به پاسخ‌های خاصی که بیمار داده ارجاع بدهد (مثلاً «با توجه به
 پاسخ‌هایی که دادید [X، Y، Z]، این ترکیب نیاز به بررسی مستقیم پزشک
 دارد»).
+
+*** اگر سابقه‌ی مراجعات اخیر بیمار در اختیارت گذاشته شده: ***
+آن را هم در تحلیل لحاظ کن. مثلاً اگر بیمار به‌تازگی (طبق سابقه) برای
+همین شکایت یا شکایت مشابه مراجعه کرده، یا نتیجه‌ی مراجعه‌ی قبلی خودش
+نیازمند توجه پزشک بوده، این می‌تواند نشانه‌ی تکرارشونده یا حادتر بودن
+وضعیت باشد و باید در reasoning و urgency_suggestion تو منعکس شود. اگر
+سابقه‌ای داده نشده، طبیعی است — فقط بر اساس اطلاعات فعلی تصمیم بگیر.
 
 *** مرز حیاتی و غیرقابل‌مذاکره: ***
 این توضیح باید فقط «چرایی نیاز به ارجاع» باشد، نه تشخیص و نه توصیه‌ی
@@ -75,6 +118,7 @@ const SYSTEM_INSTRUCTIONS = `
  * @param {number} params.weightKg
  * @param {string[]} [params.questionsAsked]
  * @param {string[]} [params.patientResponses]
+ * @param {Array} [params.patientHistory] - خلاصه‌ی حداکثر ۵ مراجعه‌ی اخیر؛ نگاه کن به formatPatientHistory
  * @returns {{ system: string, user: string }}
  */
 function generateTriagePrompt({
@@ -84,6 +128,7 @@ function generateTriagePrompt({
   weightKg,
   questionsAsked = [],
   patientResponses = [],
+  patientHistory = [],
 }) {
   if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
     throw new Error('generateTriagePrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
@@ -93,6 +138,8 @@ function generateTriagePrompt({
     .map((q, i) => `س${i + 1}: ${q}\nج${i + 1}: ${patientResponses[i] ?? '(پاسخ داده نشده)'}`)
     .join('\n');
 
+  const historyText = formatPatientHistory(patientHistory);
+
   const userContent = `
 شکایت اصلی (presenting_problem_id): ${presentingProblemId}
 سن: ${age}
@@ -100,6 +147,8 @@ function generateTriagePrompt({
 وزن: ${weightKg} کیلوگرم
 
 ${qaLines ? `سوابق پرسش و پاسخ (این پاسخ‌ها را در تصمیم نهایی واقعاً لحاظ کن، نه صرفاً بازگو):\n${qaLines}` : 'هنوز هیچ سؤال و پاسخی ثبت نشده است.'}
+
+${historyText ? `سابقه‌ی مراجعات اخیر بیمار (حداکثر ۵ مورد آخر):\n${historyText}` : ''}
 
 بر اساس این اطلاعات، طبق فرمت خواسته‌شده در دستورالعمل سیستم پاسخ بده.
 `.trim();
@@ -134,6 +183,13 @@ const QUESTIONS_SYSTEM_INSTRUCTIONS = `
 طراحی کن که دقیقاً همان علائم هشدار و ویژگی‌های تشخیصی‌افتراقی مرتبط با
 همان حوزه را بسنجند.
 
+*** سن و جنس و وزن بیمار را هم واقعاً در طراحی سؤالات لحاظ کن، نه فقط
+دریافت کن. *** آستانه‌ی نگرانی برای یک علامت می‌تواند بسته به سن بیمار
+فرق کند (مثلاً همان شکایت در یک بیمار سالمند معمولاً نیازمند توجه
+بیشتری به علائم هشدار است تا در یک بیمار جوان). اگر سن یا سایر
+مشخصات بیمار به‌نظرت روی انتخاب سؤالات تأثیر منطقی دارد، از آن استفاده
+کن.
+
 *** هرگز از یک الگوی ثابت (مثل «شدت + مدت + تب») برای همه‌ی شکایات
 استفاده نکن. *** برای هر شکایت، سؤالات باید از نظر بالینی به آن حوزه‌ی
 خاص اختصاصی باشند. برای مثال (فقط برای نشان دادن تفاوت رویکرد، نه
@@ -146,6 +202,13 @@ const QUESTIONS_SYSTEM_INSTRUCTIONS = `
   دفعات (علائم هشدار گوارشی)
 برای شکایتی که در این مثال‌ها نیست، خودت باید حوزه‌ی بالینی مناسب و
 علائم هشدارش را تشخیص دهی و سؤالات را بر همان اساس بسازی.
+
+*** اگر سابقه‌ی مراجعات اخیر بیمار در اختیارت گذاشته شده: ***
+آن را هم لحاظ کن — مثلاً اگر بیمار به‌تازگی برای همین شکایت یا شکایت
+مرتبط مراجعه کرده، می‌توانی سؤالی درباره‌ی تفاوت وضعیت فعلی با آن
+مراجعه بپرسی (مثلاً «آیا وضعیت نسبت به مراجعه‌ی قبلی بهتر شده، بدتر
+شده، یا فرقی نکرده؟»). اگر سابقه‌ای داده نشده، طبیعی است — فقط بر
+اساس شکایت فعلی سؤال طراحی کن.
 
 هر سؤال باید چندگزینه‌ای باشد (بین ۲ تا ۴ گزینه)، نه متن آزاد، تا بیمار
 به‌سادگی بتواند از بین گزینه‌ها انتخاب کند.
@@ -175,12 +238,15 @@ const QUESTIONS_SYSTEM_INSTRUCTIONS = `
  * @param {number} params.age
  * @param {'male'|'female'} params.sex
  * @param {number} params.weightKg
+ * @param {Array} [params.patientHistory] - خلاصه‌ی حداکثر ۵ مراجعه‌ی اخیر؛ نگاه کن به formatPatientHistory
  * @returns {{ system: string, user: string }}
  */
-function generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg }) {
+function generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory = [] }) {
   if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
     throw new Error('generateQuestionsPrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
   }
+
+  const historyText = formatPatientHistory(patientHistory);
 
   const userContent = `
 شکایت اصلی (presenting_problem_id): ${presentingProblemId}
@@ -188,6 +254,8 @@ function generateQuestionsPrompt({ presentingProblemId, initialDescription, age,
 جنس: ${sex === 'male' ? 'مرد' : 'زن'}
 وزن: ${weightKg} کیلوگرم
 توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}
+
+${historyText ? `سابقه‌ی مراجعات اخیر بیمار (حداکثر ۵ مورد آخر):\n${historyText}` : ''}
 
 بر اساس این شکایت، طبق فرمت خواسته‌شده در دستورالعمل سیستم، دقیقاً ۳
 سؤال چندگزینه‌ای مرتبط طراحی کن.
@@ -204,4 +272,5 @@ module.exports = {
   SYSTEM_INSTRUCTIONS,
   generateQuestionsPrompt,
   QUESTIONS_SYSTEM_INSTRUCTIONS,
+  formatPatientHistory,
 };
