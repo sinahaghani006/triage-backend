@@ -40,9 +40,16 @@ function escalateOneLevel(level) {
  *
  * قانون ۳ (خطای کامل AI => doctor_review) در buildFallbackTriageResult
  * پیاده‌سازی شده، نه اینجا — چون آن حالت اصلاً aiRaw معتبر ندارد.
+ *
+ * *** خروجی جدید: escalationReasons ***
+ * علاوه بر سطح نهایی، این تابع حالا مشخص می‌کند کدام قاعده(ها) باعث
+ * escalate خودکار شدند — تا buildTriageResultFromAI بتواند برای مسیر
+ * escalate خودکار (که AI موقع نوشتن reasoning از آن خبر نداشت) یک
+ * توضیح مکانیکی و کاملاً غیرتشخیصی اضافه کند.
  */
 function applyConservativeRules({ urgencySuggestion, confidence, clinicalAlerts }) {
   let level = urgencySuggestion;
+  const escalationReasons = [];
 
   if (
     typeof confidence === 'number' &&
@@ -50,13 +57,36 @@ function applyConservativeRules({ urgencySuggestion, confidence, clinicalAlerts 
     (level === 'normal' || level === 'home_care')
   ) {
     level = escalateOneLevel(level);
+    escalationReasons.push('low_confidence');
   }
 
   if (Array.isArray(clinicalAlerts) && clinicalAlerts.length > 0 && level === 'normal') {
     level = 'doctor_review';
+    escalationReasons.push('clinical_alerts');
   }
 
-  return level;
+  return { level, escalationReasons };
+}
+
+/**
+ * متن مکانیکی و ثابت (نه تولیدشده توسط AI) که توضیح می‌دهد چرا سیستم
+ * به‌صورت خودکار escalate کرده — کاملاً بدون هیچ قضاوت پزشکی، فقط
+ * توضیح قاعده‌ی escalate-only. این متن به reasoning خام AI اضافه
+ * می‌شود، نه جایگزین آن.
+ */
+function buildEscalationExplanation(escalationReasons) {
+  const parts = [];
+  if (escalationReasons.includes('low_confidence')) {
+    parts.push(
+      'این ارجاع به‌صورت خودکار و طبق قاعده‌ی احتیاطی سیستم انجام شده، چون سطح اطمینان تحلیل اولیه برای تصمیم‌گیری قطعی کافی نبود.'
+    );
+  }
+  if (escalationReasons.includes('clinical_alerts')) {
+    parts.push(
+      'این ارجاع به‌صورت خودکار و طبق قاعده‌ی احتیاطی سیستم انجام شده، چون علائم هشداری در پاسخ‌های ثبت‌شده وجود دارد که نیاز به بررسی مستقیم پزشک دارد.'
+    );
+  }
+  return parts.join(' ');
 }
 
 /**
@@ -80,18 +110,29 @@ function buildTriageResultFromAI({
   questionsAsked = [],
   patientResponses = [],
 }) {
-  const finalLevel = applyConservativeRules({
+  const { level: finalLevel, escalationReasons } = applyConservativeRules({
     urgencySuggestion: aiRaw.urgency_suggestion,
     confidence: aiRaw.confidence,
     clinicalAlerts: aiRaw.clinical_alerts,
   });
+
+  const baseReasoning = aiRaw.reasoning || '';
+  // اگر escalate خودکار رخ داده (یعنی AI موقع نوشتن reasoning از این
+  // تصمیم خبر نداشت)، یک توضیح مکانیکی و غیرتشخیصی اضافه می‌کنیم تا
+  // «چرایی ارجاع» در همه‌ی مسیرهای doctor_review پوشش داده شود، نه فقط
+  // وقتی خود AI مستقیم doctor_review پیشنهاد داده.
+  const escalationExplanation =
+    escalationReasons.length > 0 ? buildEscalationExplanation(escalationReasons) : '';
+  const finalReasoning = escalationExplanation
+    ? `${baseReasoning} ${escalationExplanation}`.trim()
+    : baseReasoning;
 
   return {
     session_id: sessionId,
     presenting_problem_id: presentingProblemId,
     urgency_level: finalLevel,
     confidence: typeof aiRaw.confidence === 'number' ? aiRaw.confidence : 0,
-    reasoning: aiRaw.reasoning || '',
+    reasoning: finalReasoning,
     clinical_alerts: aiRaw.clinical_alerts || [],
     recommendations: [], // عمداً خالی — نگاه کن به کامنت بالا
     questions_asked: questionsAsked,
@@ -138,6 +179,7 @@ module.exports = {
   URGENCY_ORDER,
   escalateOneLevel,
   applyConservativeRules,
+  buildEscalationExplanation,
   buildTriageResultFromAI,
   buildFallbackTriageResult,
 };
