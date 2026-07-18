@@ -78,11 +78,46 @@ function validateAIResponse(rawText) {
   return result.data;
 }
 
+/**
+ * *** لایه‌ی دفاعی جدید — تشخیص و مدیریت artifact زبان خارجی. ***
+ * به دستور مدیر پروژه، بعد از کشف باگ واقعی با Groq: گاهی مدل یک کلمه
+ * از زبان دیگری (مثلاً ویتنامی) وسط متن فارسی/انگلیسی leak می‌کند.
+ * تشخیص: حروف لاتین با علامت تشدید (accented) در فارسی/انگلیسی پزشکی
+ * رایج عملاً وجود ندارند، پس نشانه‌ی قابل‌اعتمادی برای این artifact‌اند.
+ */
+const ACCENTED_LATIN_PATTERN = /[À-ÿ\u1E00-\u1EFF]/;
+
+/**
+ * آیا این متن حاوی کلمه‌ای با حروف لاتین accented (نشانه‌ی احتمالی leak
+ * زبان دیگر) است؟
+ */
+function containsForeignLanguageArtifact(text) {
+  return typeof text === 'string' && ACCENTED_LATIN_PATTERN.test(text);
+}
+
+/**
+ * کلمات حاوی حروف لاتین accented را از متن حذف می‌کند (نه کل جمله)،
+ * و فاصله‌های اضافه‌ی باقی‌مانده را جمع می‌کند. برای فیلدهای غیر بحرانی
+ * مثل reasoning استفاده می‌شود — هرگز روی urgency_level یا clinical_alerts.
+ */
+function stripForeignLanguageArtifacts(text) {
+  if (typeof text !== 'string') return text;
+  const cleaned = text
+    .split(/\s+/)
+    .filter((word) => !ACCENTED_LATIN_PATTERN.test(word))
+    .join(' ')
+    .replace(/\s+([.,،؛])/g, '$1')
+    .trim();
+  return cleaned;
+}
+
 module.exports = {
   ResponseValidationError,
   safeParseJson,
   validateAIResponse,
   validateQuestionsResponse,
+  containsForeignLanguageArtifact,
+  stripForeignLanguageArtifacts,
 };
 
 /**
@@ -113,6 +148,19 @@ function validateQuestionsResponse(rawText) {
       `تعداد سؤالات باید دقیقاً ۳ باشد، ولی AI ${result.data.questions.length} سؤال برگرداند.`,
       { code: 'QUESTIONS_COUNT_MISMATCH', rawText }
     );
+  }
+
+  // *** لایه‌ی دفاعی جدید: artifact زبان خارجی در سؤالاتی که مستقیم به
+  // بیمار نشان داده می‌شوند، باعث throw می‌شود (نه strip) — چون اینجا
+  // برخلاف تحلیل نهایی، هیچ urgency_level حساسی در معرض downgrade
+  // اشتباه نیست؛ فقط باید یا سؤال تمیز باشد یا اصلاً نمایش داده نشود.
+  for (const q of result.data.questions) {
+    if (containsForeignLanguageArtifact(q.questionText) || q.options.some(containsForeignLanguageArtifact)) {
+      throw new ResponseValidationError(
+        'یکی از سؤالات حاوی کلمه‌ای از زبان غیرمنتظره است (احتمالاً artifact مدل) — برای جلوگیری از گیج‌کردن بیمار رد شد.',
+        { code: 'LANGUAGE_ARTIFACT_DETECTED', rawText }
+      );
+    }
   }
 
   return result.data;

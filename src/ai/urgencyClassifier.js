@@ -16,6 +16,8 @@
  * قبل از استفاده در تولید باید توسط مدیر پروژه بازبینی نهایی شود.
  */
 
+const { stripForeignLanguageArtifacts } = require('./responseValidator');
+
 // ترتیب فوریت از کم به زیاد — دقیقاً مطابق سند: normal < home_care < doctor_review < emergency
 const URGENCY_ORDER = ['normal', 'home_care', 'doctor_review', 'emergency'];
 
@@ -116,7 +118,13 @@ function buildTriageResultFromAI({
     clinicalAlerts: aiRaw.clinical_alerts,
   });
 
-  const baseReasoning = aiRaw.reasoning || '';
+  const rawReasoning = aiRaw.reasoning || '';
+  // *** لایه‌ی دفاعی جدید: artifact زبان خارجی فقط از متن reasoning پاک
+  // می‌شود — هرگز روی urgency_level یا clinical_alerts دست‌کاری نمی‌کنیم،
+  // چون throw کردن کل نتیجه (و fallback به doctor_review) می‌تواند یک
+  // تشخیص emergency واقعی را به‌اشتباه تنزل دهد — دقیقاً همان چیزی که
+  // قانون escalate-only (هرگز downgrade خودکار) ممنوع کرده است.
+  const baseReasoning = stripForeignLanguageArtifacts(rawReasoning);
   // اگر escalate خودکار رخ داده (یعنی AI موقع نوشتن reasoning از این
   // تصمیم خبر نداشت)، یک توضیح مکانیکی و غیرتشخیصی اضافه می‌کنیم تا
   // «چرایی ارجاع» در همه‌ی مسیرهای doctor_review پوشش داده شود، نه فقط
