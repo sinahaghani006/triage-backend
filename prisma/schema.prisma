@@ -63,6 +63,7 @@ model User {
 
   sessions       Session[]
   patientDetails PatientDetails?
+  historySummaries PatientHistorySummary[]
 
   @@map("users")
 }
@@ -102,6 +103,7 @@ model Session {
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
    feedback      PatientFeedback?
+  historySummary PatientHistorySummary?
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   triageResult  TriageResult?
 
@@ -172,4 +174,26 @@ model PatientFeedback {
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@map("patient_feedback")
+}
+
+
+// Denormalized snapshot written automatically whenever a session reaches
+// S9_completed_triage (both auto-finalized and staff-finalized paths).
+// Exists so recent history can be summarized and passed to the AI module
+// (project manager decision, 2026-07-18) without re-querying/joining
+// Session+TriageResult on every request.
+model PatientHistorySummary {
+  id                  String   @id @default(uuid())
+  userId              String   @map("user_id")
+  sessionId           String   @unique @map("session_id")
+  presentingProblemId String?  @map("presenting_problem_id")
+  urgencyLevel        String   @map("urgency_level")
+  reasoningSummary    String?  @map("reasoning_summary")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("patient_history_summaries")
+  @@index([userId])
 }

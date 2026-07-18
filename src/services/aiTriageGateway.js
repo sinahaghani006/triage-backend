@@ -56,7 +56,7 @@ function toAiPatientResponses({ presentingProblemId, patientDetails = {}, answer
   };
 }
 
-async function runAiTriageAnalysis({ sessionId, patientResponses }) {
+async function runAiTriageAnalysis({ sessionId, patientResponses, patientHistory }) {
   let aiModule;
   try {
     aiModule = require("../ai");
@@ -74,6 +74,7 @@ async function runAiTriageAnalysis({ sessionId, patientResponses }) {
     sessionId,
     patientResponses: toAiPatientResponses(patientResponses),
     providerFn,
+    patientHistory: patientHistory || [],
   });
 
   if (!result || typeof result.urgencyLevel !== "string" || !result.triageResultJson) {
@@ -107,7 +108,7 @@ function getPresentingProblems() {
 // 2026-07-15: reinstates the "ask 3 questions" flow). Contract with AI
 // module still pending exact shape; assumes generateQuestions({
 // presentingProblemId, patientDetails }) -> [{ questionId, text, type }].
-function generateQuestions({ presentingProblemId, age, patientDetails = {} }) {
+function generateQuestions({ presentingProblemId, age, patientDetails = {}, patientHistory }) {
   let aiModule;
   try {
     aiModule = require("../ai");
@@ -127,6 +128,7 @@ function generateQuestions({ presentingProblemId, age, patientDetails = {} }) {
     sex: patientDetails.gender,
     weightKg: patientDetails.weightKg ?? patientDetails.weight,
     providerFn,
+    patientHistory: patientHistory || [],
   });
 }
 module.exports = { runAiTriageAnalysis, toAiPatientResponses, getPresentingProblems, generateQuestions };

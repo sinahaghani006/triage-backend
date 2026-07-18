@@ -5,12 +5,15 @@ const { runAiTriageAnalysis } = require('../services/aiTriageGateway');
 const { recordAudit } = require('../services/auditLogService');
 const calculateAge = require('../utils/calculateAge');
 const { generateQuestions } = require('../services/aiTriageGateway');
+const { recordHistorySummary, getRecentHistorySummary } = require('../services/patientHistoryService');
 function toPublicSession(session) {
   return {
     id: session.id,
     userId: session.userId,
     currentState: session.currentState,
+    state: session.currentState,
     presentingProblemId: session.presentingProblemId,
+    urgencyLevel: session.triageResult?.urgencyLevel ?? null,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     closedAt: session.closedAt,
@@ -89,8 +92,9 @@ async function generateSessionQuestions(req, res, next) {
       );
     }
     const age = calculateAge(patientRecord.birthDate);
+    const patientHistory = await getRecentHistorySummary(req.user.id, 5);
 
-    const result = await generateQuestions({ presentingProblemId, age, patientDetails });
+    const result = await generateQuestions({ presentingProblemId, age, patientDetails, patientHistory });
 
     return res.status(200).json({ questions: result.questions });
   } catch (err) {
@@ -155,6 +159,16 @@ async function submitSymptoms(req, res, next) {
     }
     const age = calculateAge(patientRecord.birthDate);
 
+    const submittedWeight = patientDetails?.weightKg ?? patientDetails?.weight;
+    if (submittedWeight !== undefined && submittedWeight !== null) {
+      await prisma.patientDetails.update({
+        where: { userId: req.user.id },
+        data: { weightKg: submittedWeight },
+      });
+    }
+
+    const patientHistory = await getRecentHistorySummary(req.user.id, 5);
+
     // Persist the move into S4 before calling the AI module, so the state
     // reflects reality even if the AI call is slow or fails.
     await prisma.session.update({
@@ -169,6 +183,7 @@ async function submitSymptoms(req, res, next) {
         patientDetails: { ...patientDetails, age },
         answers,
       },
+      patientHistory,
     });
 
     const resolvedState = resolveStateForUrgency(urgencyLevel);
@@ -205,6 +220,20 @@ async function submitSymptoms(req, res, next) {
       entityId: sessionId,
       metadata: { from: 'S2_collecting_information', to: finalState, urgencyLevel, autoFinalized: isAutoFinalized },
     });
+
+    if (isAutoFinalized) {
+      try {
+        await recordHistorySummary({
+          userId: req.user.id,
+          sessionId,
+          presentingProblemId,
+          urgencyLevel,
+          reasoningSummary: triageResultJson?.reasoning,
+        });
+      } catch (historyErr) {
+        // Best-effort: never let history-summary recording break the main flow.
+      }
+    }
 
     return res.status(200).json({ session: toPublicSession(updatedSession) });
   } catch (err) {
@@ -250,6 +279,18 @@ async function staffFinalizeReview(req, res, next) {
       entityId: sessionId,
       metadata: { from: session.currentState, to: 'S9_completed_triage', reviewedBy: req.user.id },
     });
+
+    try {
+      await recordHistorySummary({
+        userId: updated.userId,
+        sessionId,
+        presentingProblemId: updated.presentingProblemId,
+        urgencyLevel: updated.triageResult?.urgencyLevel,
+        reasoningSummary: updated.triageResult?.triageResultJson?.reasoning,
+      });
+    } catch (historyErr) {
+      // Best-effort: never let history-summary recording break the main flow.
+    }
 
     return res.status(200).json({ session: toPublicSession(updated) });
   } catch (err) {
