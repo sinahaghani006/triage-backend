@@ -84,19 +84,25 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, patientHistory
   return result;
 }
 
+// NOTE (2026-07-19, durable fix): reads directly from src/ai/presentingProblems.js
+// instead of going through src/ai/index.js — index.js gets rewritten often for
+// triage/questions features and repeatedly drops the getPresentingProblemsList
+// re-export (4th regression). presentingProblems.js itself is a stable,
+// independent list unrelated to those rewrites, so this bypasses the fragility
+// entirely.
 function getPresentingProblems() {
-  let aiModule;
+  let problemsModule;
   try {
-    aiModule = require("../ai");
+    problemsModule = require("../ai/presentingProblems");
   } catch (err) {
-    throw new AppError("AI module (src/ai) is not available in this environment yet", 503, "AI_SERVICE_UNAVAILABLE");
+    throw new AppError("AI module (src/ai/presentingProblems) is not available in this environment yet", 503, "AI_SERVICE_UNAVAILABLE");
   }
 
-  if (typeof aiModule.getPresentingProblemsList !== "function") {
-    throw new AppError("src/ai does not export getPresentingProblemsList as documented in the contract", 500, "AI_CONTRACT_MISMATCH");
+  if (typeof problemsModule.getPresentingProblemsList !== "function") {
+    throw new AppError("src/ai/presentingProblems does not export getPresentingProblemsList", 500, "AI_CONTRACT_MISMATCH");
   }
 
-  const list = aiModule.getPresentingProblemsList();
+  const list = problemsModule.getPresentingProblemsList();
   if (!Array.isArray(list)) {
     throw new AppError("AI module returned an unexpected shape from getPresentingProblemsList (expected an array)", 502, "AI_RESPONSE_INVALID");
   }
