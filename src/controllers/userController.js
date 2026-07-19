@@ -14,6 +14,7 @@ async function getHistorySummary(req, res, next) {
       history,
       lastWeightKg: patientRecord?.weightKg ?? null,
       lastHeightCm: patientRecord?.heightCm ?? null,
+      lastGender: patientRecord?.gender ?? null,
     });
   } catch (err) {
     return next(err);

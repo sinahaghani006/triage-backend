@@ -85,6 +85,11 @@ model PatientDetails {
   // heightCm: relatively stable, captured once (profile-level, not per
   // session, unlike weight) — project manager decision, 2026-07-18.
   heightCm  Float?    @map("height_cm")
+  // gender: demographic field, persisted like weight/height (project
+  // manager decision, 2026-07-18). Same access control as the rest of
+  // PatientDetails (owner-only, via authenticate + req.user.id scoping)
+  // — no additional restriction needed, per project manager's note.
+  gender    String?   @map("gender")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
