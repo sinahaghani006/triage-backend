@@ -160,10 +160,18 @@ async function submitSymptoms(req, res, next) {
     const age = calculateAge(patientRecord.birthDate);
 
     const submittedWeight = patientDetails?.weightKg ?? patientDetails?.weight;
+    const submittedHeight = patientDetails?.heightCm ?? patientDetails?.height;
+    const patientUpdateData = {};
     if (submittedWeight !== undefined && submittedWeight !== null) {
+      patientUpdateData.weightKg = submittedWeight;
+    }
+    if (submittedHeight !== undefined && submittedHeight !== null) {
+      patientUpdateData.heightCm = submittedHeight;
+    }
+    if (Object.keys(patientUpdateData).length > 0) {
       await prisma.patientDetails.update({
         where: { userId: req.user.id },
-        data: { weightKg: submittedWeight },
+        data: patientUpdateData,
       });
     }
 

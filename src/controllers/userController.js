@@ -13,6 +13,7 @@ async function getHistorySummary(req, res, next) {
     return res.status(200).json({
       history,
       lastWeightKg: patientRecord?.weightKg ?? null,
+      lastHeightCm: patientRecord?.heightCm ?? null,
     });
   } catch (err) {
     return next(err);

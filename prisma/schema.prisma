@@ -82,6 +82,9 @@ model PatientDetails {
   userId    String   @unique @map("user_id")
   birthDate DateTime @map("birth_date")
   weightKg  Float?    @map("weight_kg")
+  // heightCm: relatively stable, captured once (profile-level, not per
+  // session, unlike weight) — project manager decision, 2026-07-18.
+  heightCm  Float?    @map("height_cm")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
