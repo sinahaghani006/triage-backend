@@ -64,6 +64,8 @@ model User {
   sessions       Session[]
   patientDetails PatientDetails?
   historySummaries PatientHistorySummary[]
+  medicalHistory MedicalHistory?
+  periodicVitals PeriodicVitals[]
 
   @@map("users")
 }
@@ -204,4 +206,47 @@ model PatientHistorySummary {
 
   @@map("patient_history_summaries")
   @@index([userId])
+}
+
+
+// Phase 2 health-record module (project manager/CEO decision, 2026-07-19).
+// Optional, filled via a separate "complete health record" screen — never
+// part of the core triage flow. NOT yet passed to the AI module (deferred
+// to a later step, once storage is confirmed working).
+// String[] fields use Postgres native arrays (Prisma scalar lists).
+model MedicalHistory {
+  id                 String   @id @default(uuid())
+  userId             String   @unique @map("user_id")
+  chronicConditions  String[] @map("chronic_conditions")
+  allergies          String[] @map("allergies")
+  currentMedications String[] @map("current_medications")
+  surgicalHistory    String[] @map("surgical_history")
+  familyHistory      String[] @map("family_history")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("medical_history")
+}
+
+// One-to-many with User: periodic/time-series vitals (project manager
+// decision, 2026-07-19) — separate from MedicalHistory because these
+// accumulate over time rather than being a single stable record.
+// value is Json to allow structured shapes per type (e.g. blood_pressure
+// -> {systolic, diastolic}, blood_sugar -> {value, unit}), not just a
+// single number/string.
+model PeriodicVitals {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  type       String
+  value      Json
+  recordedAt DateTime @default(now()) @map("recorded_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("periodic_vitals")
+  @@index([userId])
+  @@index([userId, type])
 }
