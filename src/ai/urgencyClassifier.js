@@ -16,7 +16,7 @@
  * قبل از استفاده در تولید باید توسط مدیر پروژه بازبینی نهایی شود.
  */
 
-const { stripForeignLanguageArtifacts } = require('./responseValidator');
+const { stripForeignLanguageArtifacts, sanitizeRecommendations } = require('./responseValidator');
 
 // ترتیب فوریت از کم به زیاد — دقیقاً مطابق سند: normal < home_care < doctor_review < emergency
 const URGENCY_ORDER = ['normal', 'home_care', 'doctor_review', 'emergency'];
@@ -94,15 +94,14 @@ function buildEscalationExplanation(escalationReasons) {
 /**
  * ساخت نتیجه نهایی از یک پاسخ معتبرشده AI (is_complete === true).
  *
- * *** نکته مهم درباره recommendations: ***
- * AIRawResponseSchema فعلی (schemas.js) هیچ فیلدی برای متن توصیه ندارد،
- * در حالی‌که SYSTEM_INSTRUCTIONS در promptGenerator.js فعلاً از AI متن
- * توصیه نمی‌خواهد (تصمیم آگاهانه در همین طراحی جدید). اگر این قابلیت بعداً
- * اضافه شود، schemas.js و promptGenerator.js باید هم‌زمان و با تأیید مدیر
- * پروژه به‌روزرسانی شوند. تا آن زمان، این تابع عمداً recommendations را خالی برمی‌گرداند
- * (پیش‌فرض امن schema) و هیچ متن پزشکی حدسی تولید نمی‌کند، چون این دقیقاً
- * همان کاری‌ست که قانون غیرقابل‌مذاکره پروژه («AI هرگز جایگزین تأیید پزشکی
- * نمی‌شود») منع می‌کند.
+ * *** recommendations — به‌روزرسانی به دستور صریح مدیر پروژه: ***
+ * حالا برای سطوح normal/home_care/emergency، recommendations از پاسخ
+ * AI گرفته می‌شود (پس از پاکسازی با sanitizeRecommendations — لایه‌ی
+ * دفاعی کد که موارد حاوی نام دارو/دوز/تشخیص قطعی را حذف می‌کند، مستقل
+ * از قول مدل در پرامپت). برای doctor_review، طبق قانون صریح مدیر پروژه،
+ * recommendations همیشه خالی است — همان reasoning مفصل قبلی کافی است؛
+ * این قانون *در کد* اجرا می‌شود (نه فقط در پرامپت)، پس حتی اگر AI
+ * چیزی برای doctor_review برگرداند، اینجا نادیده گرفته می‌شود.
  */
 function buildTriageResultFromAI({
   aiRaw,
@@ -135,6 +134,12 @@ function buildTriageResultFromAI({
     ? `${baseReasoning} ${escalationExplanation}`.trim()
     : baseReasoning;
 
+  // قانون سخت (اجرا در کد، نه فقط پرامپت): doctor_review همیشه
+  // recommendations خالی دارد؛ برای بقیه‌ی سطوح، خروجی AI پس از
+  // پاکسازی heuristic استفاده می‌شود.
+  const finalRecommendations =
+    finalLevel === 'doctor_review' ? [] : sanitizeRecommendations(aiRaw.recommendations);
+
   return {
     session_id: sessionId,
     presenting_problem_id: presentingProblemId,
@@ -142,7 +147,7 @@ function buildTriageResultFromAI({
     confidence: typeof aiRaw.confidence === 'number' ? aiRaw.confidence : 0,
     reasoning: finalReasoning,
     clinical_alerts: aiRaw.clinical_alerts || [],
-    recommendations: [], // عمداً خالی — نگاه کن به کامنت بالا
+    recommendations: finalRecommendations,
     questions_asked: questionsAsked,
     patient_responses: patientResponses,
     generated_at: new Date().toISOString(),

@@ -23,7 +23,6 @@
  */
 
 const { runAiTriageAnalysisCore, generateTriageQuestionsCore } = require('./aiTriageService');
-const { getPresentingProblemsList } = require('./presentingProblems');
 
 const INTERNAL_TO_EXTERNAL_URGENCY_MAP = {
   normal: 'normal',
@@ -62,6 +61,7 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, providerFn }) 
     age: patientResponses?.age,
     sex: patientResponses?.sex,
     weightKg: patientResponses?.weightKg,
+    heightCm: patientResponses?.heightCm,
     questionsAsked: patientResponses?.questionsAsked || [],
     patientResponses: patientResponses?.responses || [],
     patientHistory: patientResponses?.patientHistory || [],
@@ -83,7 +83,6 @@ module.exports = {
   runAiTriageAnalysis,
   mapInternalToExternalUrgency,
   generateTriageQuestions,
-  getPresentingProblemsList,
 };
 
 /**

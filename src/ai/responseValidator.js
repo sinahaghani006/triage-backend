@@ -111,6 +111,52 @@ function stripForeignLanguageArtifacts(text) {
   return cleaned;
 }
 
+/**
+ * *** لایه‌ی دفاعی جدید — پاکسازی recommendations. ***
+ * به دستور صریح مدیر پروژه: نام دارو، دوز/مقدار مصرف، و جملات شبیه
+ * تشخیص قطعی تحت هیچ شرایطی نباید در recommendations باشند. این مرز
+ * در SYSTEM_INSTRUCTIONS به‌عنوان قانون سخت نوشته شده، ولی این تابع
+ * یک لایه‌ی دفاعی مستقل در کد است — یعنی این مرز فقط به قول مدل متکی
+ * نیست.
+ *
+ * *** طراحی مهم: این تابع کل نتیجه را throw/رد نمی‌کند — فقط موارد
+ * مشکوک را از آرایه حذف می‌کند. *** درس گرفته‌شده از باگ artifact زبان:
+ * throw کردن کل نتیجه یعنی fallback به doctor_review، که می‌تواند یک
+ * urgency_level واقعی (مثلاً emergency) را به‌اشتباه تنزل دهد. حذف
+ * موردی، امن‌تر و متناسب با شدت مشکل است.
+ *
+ * این یک فیلتر heuristic است، نه یک تضمین کامل زبان‌شناختی — نمی‌تواند
+ * جایگزین بازبینی انسانی/QA واقعی قبل از production شود.
+ */
+const SUSPICIOUS_RECOMMENDATION_PATTERNS = [
+  // نام‌های رایج دارو (فارسی و انگلیسی) — لیست غیرجامع، فقط دفاع لایه‌ی اول
+  /استامینوفن|ایبوپروفن|آسپرین|آموکسی‌?سیلین|پاراستامول|acetaminophen|ibuprofen|aspirin|amoxicillin|paracetamol|tylenol|advil/i,
+  // اشکال دارویی و واحدهای دوز — شامل ارقام فارسی/عربی (۰-۹) و انگلیسی (0-9)
+  /قرص|کپسول|شربت|آمپول|میلی‌?گرم|\bmg\b|بار در روز|هر\s*[\d۰-۹٠-٩]+\s*ساعت/,
+  // عبارات شبیه تشخیص قطعی
+  /مبتلا(ید|هستید)?|تشخیص قطعی|بیماری شما (است|هست)/,
+];
+
+/**
+ * آیا این متن توصیه با یکی از الگوهای ممنوع مطابقت دارد؟
+ */
+function isRecommendationSuspicious(text) {
+  if (typeof text !== 'string') return true; // هر چیز غیر از رشته، مشکوک تلقی می‌شود
+  return SUSPICIOUS_RECOMMENDATION_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/**
+ * آرایه‌ی recommendations را پاکسازی می‌کند — هر مورد مشکوک حذف می‌شود،
+ * بقیه دست‌نخورده باقی می‌مانند. اگر همه حذف شوند، آرایه‌ی خالی برمی‌گردد
+ * (وضعیت امن).
+ * @param {string[]} recommendations
+ * @returns {string[]}
+ */
+function sanitizeRecommendations(recommendations) {
+  if (!Array.isArray(recommendations)) return [];
+  return recommendations.filter((r) => !isRecommendationSuspicious(r));
+}
+
 module.exports = {
   ResponseValidationError,
   safeParseJson,
@@ -118,6 +164,8 @@ module.exports = {
   validateQuestionsResponse,
   containsForeignLanguageArtifact,
   stripForeignLanguageArtifacts,
+  sanitizeRecommendations,
+  isRecommendationSuspicious,
 };
 
 /**

@@ -19,13 +19,18 @@ const URGENCY_LEVELS = ['normal', 'home_care', 'doctor_review', 'emergency'];
 /**
  * PatientContextSchema — ورودی که به AI ارسال می‌شود.
  * قانون حیاتی پروژه: هیچ داده هویتی (نام، کد ملی، آدرس) نباید اینجا باشد.
- * فقط داده بالینی: شکایت، سن، جنس، وزن.
+ * فقط داده بالینی: شکایت، سن، جنس، وزن، قد.
+ *
+ * heightCm اختیاری است — طبق مشاهده‌ی migration جدید Backend
+ * (add_height_cm) که هنوز رسماً به این ماژول اعلام نشده بود؛ برای
+ * سازگاری با نسخه‌های قبلی Backend که این فیلد را ارسال نمی‌کنند.
  */
 const PatientContextSchema = z.object({
   presentingProblemId: z.string().min(1),
   age: z.number().int().positive().max(130),
   sex: z.enum(['male', 'female']),
   weightKg: z.number().positive().max(500),
+  heightCm: z.number().positive().max(300).optional(),
   questionsAsked: z.array(z.string()).default([]),
   patientResponses: z.array(z.string()).default([]),
 });
@@ -35,19 +40,21 @@ const PatientContextSchema = z.object({
  * این schema باید دقیقاً با چیزی که در promptGenerator.js از AI خواسته می‌شود
  * مطابقت داشته باشد.
  *
- * *** نکته مهم: این schema فیلد متن توصیه (recommendations) ندارد. ***
- * اگر promptGenerator.js از AI بخواهد «توصیه‌های عمومی مراقبتی» تولید کند،
- * این یک شکاف واقعی است که باید جداگانه با مدیر پروژه حل شود قبل از این‌که
- * urgencyClassifier.js بتواند recommendations واقعی برگرداند.
+ * *** به‌روزرسانی — به دستور صریح مدیر پروژه: ***
+ * recommendations حالا بخشی از قرارداد خروجی AI است. مرز محتوایی سخت
+ * (بدون نام دارو، بدون دوز، بدون تشخیص قطعی) در SYSTEM_INSTRUCTIONS
+ * (promptGenerator.js) به‌عنوان یک قانون سخت درج شده، و علاوه بر آن یک
+ * لایه‌ی دفاعی کد (sanitizeRecommendations در responseValidator.js) هر
+ * موردی که با این مرز مطابقت نداشته باشد را حذف می‌کند — یعنی این مرز
+ * فقط به قول مدل متکی نیست.
  */
 const AIRawResponseSchema = z.object({
   urgency_suggestion: z.enum(URGENCY_LEVELS),
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(1),
   clinical_alerts: z.array(z.string()).default([]),
+  recommendations: z.array(z.string()).default([]),
   is_complete: z.boolean(),
-  // فیلد زیر عمداً وجود ندارد تا زمانی که با مدیر پروژه حل شود:
-  // recommendations: z.array(z.string())
 });
 
 /**
@@ -62,7 +69,7 @@ const TriageResultSchema = z.object({
   confidence: z.number().min(0).max(1),
   reasoning: z.string(),
   clinical_alerts: z.array(z.string()),
-  recommendations: z.array(z.string()), // فعلاً همیشه خالی — نگاه کن به یادداشت بالا
+  recommendations: z.array(z.string()), // برای normal/home_care/emergency از AI (پس از پاکسازی)؛ برای doctor_review همیشه خالی
   questions_asked: z.array(z.string()),
   patient_responses: z.array(z.string()),
   generated_at: z.string(),
