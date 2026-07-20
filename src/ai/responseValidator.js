@@ -191,9 +191,9 @@ function validateQuestionsResponse(rawText) {
     });
   }
 
-  if (result.data.questions.length !== 3) {
+  if (result.data.questions.length !== 5) {
     throw new ResponseValidationError(
-      `تعداد سؤالات باید دقیقاً ۳ باشد، ولی AI ${result.data.questions.length} سؤال برگرداند.`,
+      `تعداد سؤالات باید دقیقاً ۵ باشد، ولی AI ${result.data.questions.length} سؤال برگرداند.`,
       { code: 'QUESTIONS_COUNT_MISMATCH', rawText }
     );
   }
