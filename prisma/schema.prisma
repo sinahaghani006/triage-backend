@@ -82,6 +82,11 @@ model Session {
   id                  String        @id @default(uuid())
   userId              String        @map("user_id")
   currentState        SessionState  @default(S2_collecting_information) @map("current_state")
+  // Self-attestation that this triage request is genuinely for the logged-in
+  // user themself (2026-07-22, project manager decision) -- guards against
+  // a family member using someone else's account. Required at session
+  // creation; also logged to AuditLog for accountability if disputed later.
+  confirmedSelf       Boolean       @default(false) @map("confirmed_self")
   presentingProblemId String?       @map("presenting_problem_id")
   closedAt            DateTime?     @map("closed_at")
   cancelledAt         DateTime?     @map("cancelled_at")

@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "confirmed_self" BOOLEAN NOT NULL DEFAULT false;

@@ -1,16 +1,17 @@
-const express = require('express');
+﻿const express = require('express');
 const sessionsController = require('../controllers/sessionsController');
 const authenticate = require('../middleware/authenticate');
 const requireRole = require('../middleware/requireRole');
 const validateRequest = require('../middleware/validateRequest');
 const {
   sessionIdParamValidator,
+  createSessionValidator,
   submitSymptomsValidator,
 } = require('../middleware/validators/sessionValidators');
 const { feedbackValidator } = require('../middleware/validators/feedbackValidators');
 const router = express.Router();
 router.use(authenticate);
-router.post('/', sessionsController.createSession);
+router.post('/', createSessionValidator, validateRequest, sessionsController.createSession);
 router.get('/', sessionsController.listSessions);
 router.get('/:id', sessionIdParamValidator, validateRequest, sessionsController.getSession);
 router.post(
