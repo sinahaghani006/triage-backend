@@ -1,4 +1,4 @@
-﻿const AppError = require("../utils/AppError");
+const AppError = require("../utils/AppError");
 const { createGroqProvider } = require("../ai/providers/groqProvider");
 
 function resolveProviderFn(mode = "triage") {
@@ -41,22 +41,27 @@ function resolveProviderFn(mode = "triage") {
   throw new AppError(`Unsupported AI_MODEL provider: "${provider}"`, 500, "AI_CONFIG_UNSUPPORTED");
 }
 
-// NOTE (assumption pending AI-member confirmation): questionsAsked/responses
-// are derived by splitting our answers[] ({questionId,answer} pairs) into
-// two parallel arrays, since the new AI contract wants flat string[] arrays.
-// weightKg intentionally omitted for now (pending questionId decision).
-function toAiPatientResponses({ presentingProblemId, patientDetails = {}, answers = [] }) {
+// 2026-07-22 fix: patientHistory AND medicalHistory must be embedded INSIDE
+// patientResponses -- the real contract in src/ai/index.js only destructures
+// { sessionId, patientResponses, providerFn }. Any sibling property (like the
+// old top-level `patientHistory` param) is silently dropped by JS
+// destructuring. This was the root cause of medicalHistory never reaching
+// the AI layer, and it turns out patientHistory had the exact same bug.
+function toAiPatientResponses({ presentingProblemId, patientDetails = {}, answers = [], patientHistory = [], medicalHistory }) {
   return {
     presentingProblemId,
     age: patientDetails.age,
     sex: patientDetails.gender,
     weightKg: patientDetails.weightKg ?? patientDetails.weight,
+    heightCm: patientDetails.heightCm ?? patientDetails.height,
     questionsAsked: answers.map((a) => a.questionId),
     responses: answers.map((a) => a.answer),
+    patientHistory,
+    medicalHistory,
   };
 }
 
-async function runAiTriageAnalysis({ sessionId, patientResponses, patientHistory }) {
+async function runAiTriageAnalysis({ sessionId, patientResponses, patientHistory, medicalHistory }) {
   let aiModule;
   try {
     aiModule = require("../ai");
@@ -72,9 +77,12 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, patientHistory
 
   const result = await aiModule.runAiTriageAnalysis({
     sessionId,
-    patientResponses: toAiPatientResponses(patientResponses),
+    patientResponses: toAiPatientResponses({
+      ...patientResponses,
+      patientHistory: patientHistory || [],
+      medicalHistory,
+    }),
     providerFn,
-    patientHistory: patientHistory || [],
   });
 
   if (!result || typeof result.urgencyLevel !== "string" || !result.triageResultJson) {
@@ -84,12 +92,6 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, patientHistory
   return result;
 }
 
-// NOTE (2026-07-19, durable fix): reads directly from src/ai/presentingProblems.js
-// instead of going through src/ai/index.js — index.js gets rewritten often for
-// triage/questions features and repeatedly drops the getPresentingProblemsList
-// re-export (4th regression). presentingProblems.js itself is a stable,
-// independent list unrelated to those rewrites, so this bypasses the fragility
-// entirely.
 function getPresentingProblems() {
   let problemsModule;
   try {
@@ -109,12 +111,12 @@ function getPresentingProblems() {
 
   return list.map(({ id, labelFa }) => ({ id, label: labelFa }));
 }
-// POST /sessions/:id/generate-questions — calls into src/ai for the
-// initial batch of triage questions (project manager decision,
-// 2026-07-15: reinstates the "ask 3 questions" flow). Contract with AI
-// module still pending exact shape; assumes generateQuestions({
-// presentingProblemId, patientDetails }) -> [{ questionId, text, type }].
-function generateQuestions({ presentingProblemId, age, patientDetails = {}, patientHistory }) {
+
+// 2026-07-22 fix: same embedding issue did NOT apply here -- generateTriageQuestions
+// in src/ai/index.js already destructures patientHistory and medicalHistory as
+// top-level params, so passing them as siblings is correct for THIS function.
+// Only added medicalHistory (was previously missing entirely).
+function generateQuestions({ presentingProblemId, age, patientDetails = {}, patientHistory, medicalHistory }) {
   let aiModule;
   try {
     aiModule = require("../ai");
@@ -135,6 +137,8 @@ function generateQuestions({ presentingProblemId, age, patientDetails = {}, pati
     weightKg: patientDetails.weightKg ?? patientDetails.weight,
     providerFn,
     patientHistory: patientHistory || [],
+    medicalHistory,
   });
 }
+
 module.exports = { runAiTriageAnalysis, toAiPatientResponses, getPresentingProblems, generateQuestions };

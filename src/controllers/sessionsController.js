@@ -36,7 +36,7 @@ async function loadOwnedSessionOr404(sessionId, userId) {
     include: { triageResult: true },
   });
   if (!session || session.userId !== userId) {
-    // Same error for "not found" and "not yours" â€” don't leak existence of
+    // Same error for "not found" and "not yours" Ã¢â‚¬â€ don't leak existence of
     // other users' sessions.
     throw new AppError('Session not found', 404, 'SESSION_NOT_FOUND');
   }
@@ -45,7 +45,7 @@ async function loadOwnedSessionOr404(sessionId, userId) {
 
 // POST /sessions
 // Implements: S1 initial_state --(create_session)--> S2 collecting_information.
-// S1 is never persisted (see sessionStateMachine.js) â€” the row is created
+// S1 is never persisted (see sessionStateMachine.js) Ã¢â‚¬â€ the row is created
 // directly in S2.
 async function createSession(req, res, next) {
   try {
@@ -64,7 +64,7 @@ async function createSession(req, res, next) {
   }
 }
 // POST /sessions/:id/generate-questions
-// Stays in S2_collecting_information â€” does not transition state, just
+// Stays in S2_collecting_information Ã¢â‚¬â€ does not transition state, just
 // returns AI-generated follow-up questions for the Frontend to ask before
 // calling submit-symptoms with the answers.
 async function generateSessionQuestions(req, res, next) {
@@ -94,8 +94,9 @@ async function generateSessionQuestions(req, res, next) {
     }
     const age = calculateAge(patientRecord.birthDate);
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
+    const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
 
-    const result = await generateQuestions({ presentingProblemId, age, patientDetails, patientHistory });
+    const result = await generateQuestions({ presentingProblemId, age, patientDetails, patientHistory, medicalHistory: medicalHistoryRecord });
 
     return res.status(200).json({ questions: result.questions });
   } catch (err) {
@@ -181,6 +182,7 @@ async function submitSymptoms(req, res, next) {
     }
 
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
+    const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
     await assertCanStartTriage(req.user.id);
 
 
@@ -199,6 +201,7 @@ async function submitSymptoms(req, res, next) {
         answers,
       },
       patientHistory,
+      medicalHistory: medicalHistoryRecord,
     });
 
     const resolvedState = resolveStateForUrgency(urgencyLevel);
@@ -211,7 +214,7 @@ async function submitSymptoms(req, res, next) {
     }
 
     // Decision (project manager, 2026-07-12): finalize_triage is Role:System
-    // in the diagram, so S6/S7/S8 go straight to S9 here â€” no separate
+    // in the diagram, so S6/S7/S8 go straight to S9 here Ã¢â‚¬â€ no separate
     // Frontend call. S5 (pending_doctor_review) is the one exception: it
     // stays open until a staff member reviews it (see staffFinalizeReview).
     const isAutoFinalized = AUTO_FINALIZE_STATES.has(resolvedState);
@@ -264,7 +267,7 @@ async function submitSymptoms(req, res, next) {
 // POST /sessions/:id/staff-finalize
 // Implements: S5 pending_doctor_review --(finalize_triage)--> S9 completed_triage.
 // Staff-only (see requireStaff middleware). Minimal Phase-1 stand-in for a
-// real doctor review panel (Phase 2, out of scope for this team) â€” staff
+// real doctor review panel (Phase 2, out of scope for this team) Ã¢â‚¬â€ staff
 // accounts are created manually via SQL for now (see README).
 // Not ownership-scoped: staff review sessions belonging to any patient.
 async function staffFinalizeReview(req, res, next) {
@@ -396,7 +399,7 @@ async function cancelSession(req, res, next) {
 }
 // POST /sessions/:id/feedback
 // Only allowed once triage is fully completed (S9). One feedback per
-// session â€” resubmission overwrites via upsert (project manager
+// session Ã¢â‚¬â€ resubmission overwrites via upsert (project manager
 // decision, 2026-07-15).
 async function submitFeedback(req, res, next) {
   const sessionId = req.params.id;
