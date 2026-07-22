@@ -39,7 +39,7 @@ async function getMedicalHistory(req, res, next) {
   }
 }
 
-// PUT /users/me/medical-history — full or partial update (project manager
+// PUT /users/me/medical-history Ã¢â‚¬â€ full or partial update (project manager
 // decision, 2026-07-19); all fields optional, never required for triage.
 async function updateMedicalHistory(req, res, next) {
   try {
@@ -63,7 +63,7 @@ async function updateMedicalHistory(req, res, next) {
   }
 }
 
-// POST /users/me/vitals — records one periodic vitals reading.
+// POST /users/me/vitals Ã¢â‚¬â€ records one periodic vitals reading.
 async function createVital(req, res, next) {
   try {
     const { type, value, recordedAt } = req.body;
@@ -81,7 +81,7 @@ async function createVital(req, res, next) {
   }
 }
 
-// GET /users/me/vitals — history, optionally filtered by ?type=
+// GET /users/me/vitals Ã¢â‚¬â€ history, optionally filtered by ?type=
 async function listVitals(req, res, next) {
   try {
     const { type } = req.query;
@@ -97,7 +97,43 @@ async function listVitals(req, res, next) {
   }
 }
 
+
+// PATCH /users/me/patient-details
+// Step 2 of registration (2026-07-22): Frontend calls this immediately
+// after /auth/register succeeds. Upsert-based so it also works for later updates.
+async function upsertPatientDetails(req, res, next) {
+  try {
+    const { birthDate, weightKg, heightCm, gender } = req.body;
+    const data = { birthDate: new Date(birthDate) };
+    if (weightKg !== undefined) data.weightKg = weightKg;
+    if (heightCm !== undefined) data.heightCm = heightCm;
+    if (gender !== undefined) data.gender = gender;
+
+    const record = await prisma.patientDetails.upsert({
+      where: { userId: req.user.id },
+      create: { userId: req.user.id, ...data },
+      update: data,
+    });
+
+    return res.status(200).json({ patientDetails: record });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /users/me/wallet
+async function getWalletInfo(req, res, next) {
+  try {
+    const { getWallet } = require('../services/walletService');
+    const wallet = await getWallet(req.user.id);
+    return res.status(200).json({ wallet });
+  } catch (err) {
+    return next(err);
+  }
+}
 module.exports = {
+  getWalletInfo,
+  upsertPatientDetails,
   getHistorySummary,
   getMedicalHistory,
   updateMedicalHistory,

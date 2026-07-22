@@ -1,7 +1,7 @@
-﻿const express = require('express');
+const express = require('express');
 const sessionsController = require('../controllers/sessionsController');
 const authenticate = require('../middleware/authenticate');
-const requireStaff = require('../middleware/requireStaff');
+const requireRole = require('../middleware/requireRole');
 const validateRequest = require('../middleware/validateRequest');
 const {
   sessionIdParamValidator,
@@ -27,7 +27,7 @@ router.post(
 );
 router.post(
   '/:id/staff-finalize',
-  requireStaff,
+  requireRole('doctor', 'admin'),
   sessionIdParamValidator,
   validateRequest,
   sessionsController.staffFinalizeReview,

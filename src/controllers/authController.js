@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+﻿const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prismaClient');
 const AppError = require('../utils/AppError');
@@ -20,6 +20,7 @@ function toPublicUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
+    role: user.role,
     createdAt: user.createdAt,
     ...(user.patientDetails
       ? { birthDate: user.patientDetails.birthDate, weightKg: user.patientDetails.weightKg }
@@ -27,17 +28,7 @@ function toPublicUser(user) {
   };
 }
 
-// Sets the JWT as an httpOnly cookie so the browser holds the session
-// without client-side JS ever touching the token (auto-login on register,
-// confirmed by project manager). The token is ALSO still returned in the
-// JSON body below for non-browser clients (mobile apps, Postman, etc.) —
-// this is additive to the existing contract, nothing is removed from it.
 function setAuthCookie(res, token) {
-  // *.vercel.app is on the public suffix list, so a Frontend project and
-  // this Backend project (two different *.vercel.app subdomains) count as
-  // cross-site for cookie purposes, not same-site — despite both being
-  // "vercel.app". Cross-site cookies require SameSite=None + Secure.
-  // Locally (http://localhost) neither applies, so Lax + non-secure is used.
   res.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
     secure: nodeEnv === 'production',
@@ -47,9 +38,13 @@ function setAuthCookie(res, token) {
 }
 
 // POST /auth/register
+// 2026-07-22 change: birthDate/patientDetails are no longer collected here.
+// Registration is step 1 of 2 -- Frontend must immediately call
+// PATCH /users/me/patient-details right after this succeeds. A Wallet is
+// created for every new user with the default starting balance.
 async function register(req, res, next) {
   try {
-    const { name, email, password, birthDate } = req.body;
+    const { name, email, password } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -57,15 +52,12 @@ async function register(req, res, next) {
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    // Nested write: User + PatientDetails created atomically in one insert,
-    // so age (derived from birthDate) is always available by the time a
-    // session reaches submit-symptoms.
     const user = await prisma.user.create({
       data: {
         name,
         email,
         passwordHash,
-        patientDetails: { create: { birthDate: new Date(birthDate) } },
+        wallet: { create: {} },
       },
       include: { patientDetails: true },
     });
@@ -82,7 +74,7 @@ async function register(req, res, next) {
 // POST /auth/login
 async function login(req, res, next) {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     const user = await prisma.user.findUnique({ where: { email }, include: { patientDetails: true } });
     if (!user) {
@@ -100,6 +92,17 @@ async function login(req, res, next) {
         metadata: { reason: 'wrong_password' },
       });
       throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
+    }
+
+    if (role && role !== user.role) {
+      recordAudit({
+        userId: user.id,
+        action: 'login_failed',
+        entityType: 'User',
+        entityId: user.id,
+        metadata: { reason: 'role_mismatch', requestedRole: role, actualRole: user.role },
+      });
+      throw new AppError('This account does not have the requested role', 403, 'ROLE_MISMATCH');
     }
 
     const token = signToken(user);
