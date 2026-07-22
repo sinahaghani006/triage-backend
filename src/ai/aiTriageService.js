@@ -11,8 +11,9 @@
  * این امضا فقط sessionId و patientResponses را ذکر کرده، نه presentingProblemId
  * یا داده‌های پرونده بیمار (سن، جنس، وزن) به‌طور جداگانه. چون این ماژول
  * مستقیم به DB وصل نمی‌شود، فرض شده Backend این داده‌ها را از قبل در قالب
- * patientResponses (به‌عنوان یک object، نه فقط آرایه‌ی متن) در اختیار می‌گذارد.
- * این یک فرض طراحی است، نه واقعیت تأییدشده — باید با مدیر پروژه چک شود.
+ * patientResponses (به‌عنوان یک object، نه فقط آرایه‌ای از متن) در اختیار
+ * می‌گذارد. این یک فرض طراحی است، نه واقعیت تأییدشده — باید با مدیر پروژه
+ * چک شود.
  *
  * provider واقعی (Groq یا هرچیز دیگر) اینجا import نمی‌شود؛ از طریق
  * providerFn تزریق می‌شود تا این فایل به‌راحتی با mock تست شود و به یک
@@ -52,6 +53,7 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
     questionsAsked = [],
     patientResponses = [],
     patientHistory = [],
+    medicalHistory,
   } = patientContext;
 
   let triageResult;
@@ -66,6 +68,7 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
       questionsAsked,
       patientResponses,
       patientHistory,
+      medicalHistory,
     });
 
     const providerResult = await callAIProvider(prompt, providerFn);
@@ -121,11 +124,6 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
   };
 }
 
-module.exports = {
-  runAiTriageAnalysisCore,
-  generateTriageQuestionsCore,
-};
-
 /**
  * *** قابلیت جدید — orchestrator مرحله‌ی تولید سؤال پویا. ***
  * به دستور صریح مدیر پروژه، بر اساس نمونه‌ی هاردکد مدیرعامل سینا.
@@ -156,10 +154,24 @@ async function generateTriageQuestionsCore({
   sex,
   weightKg,
   patientHistory = [],
+  medicalHistory,
   providerFn,
 }) {
-  const prompt = generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory });
+  const prompt = generateQuestionsPrompt({
+    presentingProblemId,
+    initialDescription,
+    age,
+    sex,
+    weightKg,
+    patientHistory,
+    medicalHistory,
+  });
   const providerResult = await callAIProvider(prompt, providerFn);
   const validated = validateQuestionsResponse(providerResult.rawText);
   return validated;
 }
+
+module.exports = {
+  runAiTriageAnalysisCore,
+  generateTriageQuestionsCore,
+};

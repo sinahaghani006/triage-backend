@@ -18,6 +18,7 @@
 
 const { URGENCY_LEVELS } = require('./schemas');
 const { findPresentingProblemById } = require('./presentingProblems');
+const { sanitizeMedicalHistory, hasAnyMedicalHistoryContent } = require('./medicalHistorySanitizer');
 
 /**
  * محاسبه‌ی فاصله‌ی زمانی نسبی فارسی از یک تاریخ ISO تا الان.
@@ -87,6 +88,64 @@ function formatPatientHistory(patientHistory) {
   return `${introLine}\n${lines.join('\n')}`;
 }
 
+/**
+ * *** قابلیت جدید — Task «اتصال Medical History»، تأیید مدیر پروژه در همین گفتگو. ***
+ *
+ * قرارداد واقعی Backend (GET /users/me/medical-history، تأییدشده با شواهد
+ * خام از medicalHistoryValidators.js): پنج فیلد آرایه‌ای از متن آزاد —
+ * chronicConditions, allergies, currentMedications, surgicalHistory,
+ * familyHistory. بدون اعتبارسنجی محتوایی در Backend.
+ *
+ * *** قرارداد حریم خصوصی — حیاتی، دفاع لایه‌ی اول: ***
+ * قبل از قالب‌بندی، این تابع medicalHistory را از طریق
+ * sanitizeMedicalHistory (medicalHistorySanitizer.js) رد می‌کند که
+ * الگوهای قابل‌تشخیص هویتی (شماره تلفن، کدملی، ایمیل) را حذف و هر فیلد
+ * را به حداکثر ۱۰ مورد محدود می‌کند. این فیلتر اسم اشخاص را تشخیص
+ * نمی‌دهد (محدودیت شناخته‌شده و مستند — نگاه کن به medicalHistorySanitizer.js)؛
+ * دفاع دوم (دستورالعمل صریح به AI برای نادیده‌گرفتن هر چیز هویتی‌مانند)
+ * در SYSTEM_INSTRUCTIONS و QUESTIONS_SYSTEM_INSTRUCTIONS قرار دارد.
+ *
+ * *** تصمیم تأییدشده درباره‌ی نام دارو: ***
+ * ذکر نام داروی مصرفی توسط خود بیمار (در currentMedications) در ورودی
+ * prompt مجاز است — چون این ورودی بیمار است، نه پیشنهاد AI. قانون سخت
+ * «بدون نام دارو» فقط خروجی AI (reasoning/recommendations) را می‌بندد،
+ * نه ورودی. این تمایز باید برای هر توسعه‌دهنده‌ی بعدی روشن باشد.
+ *
+ * @param {{chronicConditions?: string[], allergies?: string[], currentMedications?: string[], surgicalHistory?: string[], familyHistory?: string[]}} [medicalHistory]
+ * @returns {string} متن قالب‌بندی‌شده برای درج در prompt، یا رشته‌ی خالی اگر داده‌ای نباشد.
+ */
+function formatMedicalHistory(medicalHistory) {
+  if (!medicalHistory || typeof medicalHistory !== 'object') {
+    return '';
+  }
+
+  const sanitized = sanitizeMedicalHistory(medicalHistory);
+  if (!hasAnyMedicalHistoryContent(sanitized)) {
+    return '';
+  }
+
+  const FIELD_LABELS_FA = {
+    chronicConditions: 'بیماری‌های زمینه‌ای',
+    allergies: 'آلرژی‌ها',
+    currentMedications: 'داروهای مصرفی فعلی',
+    surgicalHistory: 'سوابق جراحی',
+    familyHistory: 'سابقه‌ی خانوادگی',
+  };
+
+  const lines = Object.keys(FIELD_LABELS_FA)
+    .map((field) => {
+      const items = sanitized[field];
+      if (!items || items.length === 0) return null;
+      return `${FIELD_LABELS_FA[field]}: ${items.join('، ')}`;
+    })
+    .filter(Boolean);
+
+  const introLine =
+    'سابقه‌ی پزشکی ثبت‌شده‌ی بیمار (این را در تحلیل واقعاً لحاظ کن؛ اگر هر نام شخص یا هر داده‌ی هویتی‌مانندی در این متن دیدی، کاملاً نادیده‌اش بگیر و هرگز آن را در پاسخت تکرار نکن):';
+
+  return `${introLine}\n${lines.join('\n')}`;
+}
+
 const SYSTEM_INSTRUCTIONS = `
 تو یک دستیار غربالگری بالینی هستی، نه یک پزشک. وظیفه‌ات فقط طبقه‌بندی
 اولیه‌ی فوریت بر اساس اطلاعات داده‌شده است، نه تشخیص یا تجویز درمان.
@@ -124,6 +183,18 @@ urgency_suggestion تو منعکس شود. reasoning تو باید صریحاً 
 وضعیت باشد و باید در reasoning و urgency_suggestion تو منعکس شود. اگر
 سابقه‌ای داده نشده، طبیعی است — فقط بر اساس اطلاعات فعلی تصمیم بگیر و
 هیچ اشاره‌ای به سابقه نکن.
+
+*** اگر سابقه‌ی پزشکی بیمار (بیماری زمینه‌ای، آلرژی، داروی مصرفی، سابقه‌ی
+جراحی، سابقه‌ی خانوادگی) در اختیارت گذاشته شده: ***
+این اطلاعات را واقعاً در ارزیابی خطر و در urgency_suggestion لحاظ کن —
+مثلاً بیماری زمینه‌ای یا دارویی خاص می‌تواند آستانه‌ی نگرانی برای برخی
+علائم را بالا یا پایین ببرد. *** نکته‌ی حیاتی حریم خصوصی: *** این متن‌ها
+توسط خود بیمار و بدون هیچ کنترلی نوشته شده‌اند. اگر در هر بخش از این
+سابقه‌ی پزشکی به نام یک شخص، شماره تلفن، کد ملی، یا هر داده‌ی دیگری که
+شبیه اطلاعات هویتی است برخوردی، آن را کاملاً نادیده بگیر و تحت هیچ
+شرایطی آن را در reasoning یا هیچ بخش دیگری از پاسخت تکرار یا حتی اشاره
+نکن — فقط از محتوای بالینی (نام بیماری، نوع آلرژی، نام دارو، نوع
+جراحی) استفاده کن.
 
 *** مرز حیاتی و غیرقابل‌مذاکره (درباره‌ی reasoning در حالت doctor_review): ***
 این توضیح باید فقط «چرایی نیاز به ارجاع» باشد، نه تشخیص و نه توصیه‌ی
@@ -190,6 +261,7 @@ urgency_suggestion تو منعکس شود. reasoning تو باید صریحاً 
  * @param {string[]} [params.questionsAsked]
  * @param {string[]} [params.patientResponses]
  * @param {Array} [params.patientHistory] - خلاصه‌ی حداکثر ۵ مراجعه‌ی اخیر؛ نگاه کن به formatPatientHistory
+ * @param {object} [params.medicalHistory] - { chronicConditions, allergies, currentMedications, surgicalHistory, familyHistory }؛ نگاه کن به formatMedicalHistory
  * @returns {{ system: string, user: string }}
  */
 function generateTriagePrompt({
@@ -201,6 +273,7 @@ function generateTriagePrompt({
   questionsAsked = [],
   patientResponses = [],
   patientHistory = [],
+  medicalHistory,
 }) {
   if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
     throw new Error('generateTriagePrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
@@ -211,6 +284,7 @@ function generateTriagePrompt({
     .join('\n');
 
   const historyText = formatPatientHistory(patientHistory);
+  const medicalHistoryText = formatMedicalHistory(medicalHistory);
 
   const userContent = `
 شکایت اصلی (presenting_problem_id): ${presentingProblemId}
@@ -222,6 +296,8 @@ ${typeof heightCm === 'number' ? `قد: ${heightCm} سانتی‌متر` : ''}
 ${qaLines ? `سوابق پرسش و پاسخ (این پاسخ‌ها را در تصمیم نهایی واقعاً لحاظ کن، نه صرفاً بازگو):\n${qaLines}` : 'هنوز هیچ سؤال و پاسخی ثبت نشده است.'}
 
 ${historyText}
+
+${medicalHistoryText}
 
 بر اساس این اطلاعات، طبق فرمت خواسته‌شده در دستورالعمل سیستم پاسخ بده.
 `.trim();
@@ -288,9 +364,15 @@ const QUESTIONS_SYSTEM_INSTRUCTIONS = `
 ذکر کند). اگر سابقه‌ای داده نشده، طبیعی است — فقط بر اساس شکایت فعلی
 سؤال طراحی کن و هیچ اشاره‌ای به سابقه نکن.
 
-*** فاز فعلی محدود است: *** فقط به شکایت‌ها، نتایج، و فاصله‌ی زمانی
-سابقه توجه کن. بیماری زمینه‌ای، داروهای مصرفی، یا آلرژی هنوز بخشی از
-داده‌ی در دسترست نیست — دراین‌باره چیزی فرض یا سؤال نکن.
+*** اگر سابقه‌ی پزشکی بیمار (بیماری زمینه‌ای، آلرژی، داروی مصرفی، سابقه‌ی
+جراحی، سابقه‌ی خانوادگی) در اختیارت گذاشته شده: ***
+در طراحی سؤالات از آن استفاده کن — مثلاً اگر بیمار سابقه‌ی آلرژی یا
+بیماری زمینه‌ای مرتبط با حوزه‌ی بالینی شکایت فعلی دارد، می‌توانی یکی از
+سؤالات را حول همین ارتباط بسازی. *** نکته‌ی حیاتی حریم خصوصی: *** این
+متن‌ها توسط خود بیمار و بدون کنترل نوشته شده‌اند. اگر به نام شخص، شماره
+تلفن، کد ملی، یا هر داده‌ی هویتی‌مانند دیگری برخوردی، آن را کاملاً
+نادیده بگیر و هرگز در هیچ سؤالی تکرار یا حتی اشاره نکن. اگر سابقه‌ی
+پزشکی داده نشده، طبیعی است — فقط بر اساس شکایت فعلی سؤال طراحی کن.
 
 هر سؤال باید چندگزینه‌ای باشد (بین ۲ تا ۴ گزینه)، نه متن آزاد، تا بیمار
 به‌سادگی بتواند از بین گزینه‌ها انتخاب کند.
@@ -323,14 +405,16 @@ const QUESTIONS_SYSTEM_INSTRUCTIONS = `
  * @param {'male'|'female'} params.sex
  * @param {number} params.weightKg
  * @param {Array} [params.patientHistory] - خلاصه‌ی حداکثر ۵ مراجعه‌ی اخیر؛ نگاه کن به formatPatientHistory
+ * @param {object} [params.medicalHistory] - { chronicConditions, allergies, currentMedications, surgicalHistory, familyHistory }؛ نگاه کن به formatMedicalHistory
  * @returns {{ system: string, user: string }}
  */
-function generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory = [] }) {
+function generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory = [], medicalHistory }) {
   if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
     throw new Error('generateQuestionsPrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
   }
 
   const historyText = formatPatientHistory(patientHistory);
+  const medicalHistoryText = formatMedicalHistory(medicalHistory);
 
   const userContent = `
 شکایت اصلی (presenting_problem_id): ${presentingProblemId}
@@ -340,6 +424,8 @@ function generateQuestionsPrompt({ presentingProblemId, initialDescription, age,
 توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}
 
 ${historyText}
+
+${medicalHistoryText}
 
 بر اساس این شکایت، طبق فرمت خواسته‌شده در دستورالعمل سیستم، دقیقاً ۵
 سؤال چندگزینه‌ای مرتبط طراحی کن.
@@ -357,4 +443,5 @@ module.exports = {
   generateQuestionsPrompt,
   QUESTIONS_SYSTEM_INSTRUCTIONS,
   formatPatientHistory,
+  formatMedicalHistory,
 };

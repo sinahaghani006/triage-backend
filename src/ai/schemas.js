@@ -25,6 +25,26 @@ const URGENCY_LEVELS = ['normal', 'home_care', 'doctor_review', 'emergency'];
  * (add_height_cm) که هنوز رسماً به این ماژول اعلام نشده بود؛ برای
  * سازگاری با نسخه‌های قبلی Backend که این فیلد را ارسال نمی‌کنند.
  */
+/**
+ * MedicalHistorySchema — Task «اتصال Medical History»، تأیید مدیر پروژه
+ * در همین گفتگو.
+ *
+ * قرارداد واقعی Backend (GET /users/me/medical-history، تأییدشده با شواهد
+ * خام از medicalHistoryValidators.js): پنج فیلد آرایه‌ای از متن آزاد،
+ * بدون اعتبارسنجی محتوایی. این schema فقط شکل داده (آرایه‌ای از رشته) را
+ * چک می‌کند — پاک‌سازی محتوایی (حذف شماره تلفن/کدملی/ایمیل) وظیفه‌ی
+ * medicalHistorySanitizer.js است، نه این schema.
+ */
+const MedicalHistorySchema = z
+  .object({
+    chronicConditions: z.array(z.string()).default([]),
+    allergies: z.array(z.string()).default([]),
+    currentMedications: z.array(z.string()).default([]),
+    surgicalHistory: z.array(z.string()).default([]),
+    familyHistory: z.array(z.string()).default([]),
+  })
+  .optional();
+
 const PatientContextSchema = z.object({
   presentingProblemId: z.string().min(1),
   age: z.number().int().positive().max(130),
@@ -33,6 +53,7 @@ const PatientContextSchema = z.object({
   heightCm: z.number().positive().max(300).optional(),
   questionsAsked: z.array(z.string()).default([]),
   patientResponses: z.array(z.string()).default([]),
+  medicalHistory: MedicalHistorySchema,
 });
 
 /**
@@ -89,7 +110,7 @@ const TriageResultSchema = z.object({
  * سؤال (قبل از submit-symptoms نهایی) اعتبارسنجی می‌کند — کاملاً جدا از
  * AIRawResponseSchema که برای مرحله‌ی تشخیص نهایی urgency است.
  *
- * تعداد گزینه‌ها (۲ تا ۴) در schema چک می‌شود؛ تعداد دقیق سؤالات (همیشه ۳)
+ * تعداد گزینه‌ها (۲ تا ۴) در schema چک می‌شود؛ تعداد دقیق سؤالات (همیشه ۵)
  * چون این شبیه‌ساز zod از .length() پشتیبانی نمی‌کند، در aiTriageService.js
  * به‌صورت جداگانه و صریح چک و در صورت نقض خطا پرتاب می‌شود.
  */
@@ -105,6 +126,7 @@ const TriageQuestionsRawSchema = z.object({
 module.exports = {
   URGENCY_LEVELS,
   PatientContextSchema,
+  MedicalHistorySchema,
   AIRawResponseSchema,
   TriageResultSchema,
   TriageQuestionSchema,

@@ -7,7 +7,7 @@
  *
  * *** نگاشت home_care (داخلی) → home_treatment (قرارداد خارجی Backend) ***
  * قانون پروژه: این ماژول داخلاً از 'home_care' استفاده می‌کند (چون
- * urgencyClassifier.js و URGENCY_ORDER همینطور طراحی شده‌اند)، اما
+ * urgencyClassifier.js و URGENCY_ORDER همین‌طور طراحی شده‌اند)، اما
  * Backend انتظار 'home_treatment' را دارد. این فایل، نه urgencyClassifier.js،
  * مسئول این تبدیل نهایی است.
  *
@@ -15,9 +15,11 @@
  * امضای رسمی فقط patientResponses را ذکر کرده. این فایل فرض می‌کند
  * patientResponses یک object با شکل زیر است، نه صرفاً آرایه‌ای از رشته:
  *   {
- *     presentingProblemId, age, sex, weightKg,
+ *     presentingProblemId, age, sex, weightKg, heightCm,
  *     questionsAsked: string[],
- *     responses: string[]
+ *     responses: string[],
+ *     patientHistory: Array<...>,
+ *     medicalHistory: { chronicConditions, allergies, currentMedications, surgicalHistory, familyHistory }
  *   }
  * این فرض باید توسط مدیر پروژه تأیید یا اصلاح شود.
  */
@@ -65,6 +67,7 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, providerFn }) 
     questionsAsked: patientResponses?.questionsAsked || [],
     patientResponses: patientResponses?.responses || [],
     patientHistory: patientResponses?.patientHistory || [],
+    medicalHistory: patientResponses?.medicalHistory,
   };
 
   const { urgencyLevel, triageResultJson } = await runAiTriageAnalysisCore({
@@ -79,19 +82,13 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, providerFn }) 
   };
 }
 
-module.exports = {
-  runAiTriageAnalysis,
-  mapInternalToExternalUrgency,
-  generateTriageQuestions,
-};
-
 /**
  * *** قابلیت جدید — نقطه ورود مرحله‌ی تولید سؤال پویا. ***
  * به دستور صریح مدیر پروژه، برای فراخوانی بعد از انتخاب شکایت توسط
  * بیمار، قبل از submit-symptoms نهایی. این تابع runAiTriageAnalysis
  * موجود را جایگزین یا تغییر نمی‌دهد — کاملاً مستقل و جداست.
  *
- * خروجی مستقیماً قابل نمایش در UI است: آرایه‌ای از ۳ سؤال، هرکدام با
+ * خروجی مستقیماً قابل نمایش در UI است: آرایه‌ای از ۵ سؤال، هرکدام با
  * متن سؤال و آرایه‌ی گزینه‌ها.
  *
  * *** تصمیم طراحی: در صورت خطای AI/provider/validation، این تابع خطا
@@ -104,13 +101,38 @@ module.exports = {
  * @param {number} params.age
  * @param {'male'|'female'} params.sex
  * @param {number} params.weightKg
- * @param {Array} [params.patientHistory] - خلاصه‌ی حداکثر ۵ مراجعه‌ی اخیر بیمار (فقط relativeDate, previousComplaint, outcome, recommendationSummary - هرگز داده‌ی هویتی)
+ * @param {Array} [params.patientHistory] - خلاصه‌ی حداکثر ۱۰ مراجعه‌ی اخیر بیمار
+ * @param {object} [params.medicalHistory] - { chronicConditions, allergies, currentMedications, surgicalHistory, familyHistory } — هرگز داده‌ی هویتی
  * @param {function} params.providerFn
  * @returns {Promise<{ questions: Array<{questionText: string, options: string[]}> }>}
  */
-async function generateTriageQuestions({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory = [], providerFn }) {
+async function generateTriageQuestions({
+  presentingProblemId,
+  initialDescription,
+  age,
+  sex,
+  weightKg,
+  patientHistory = [],
+  medicalHistory,
+  providerFn,
+}) {
   if (!providerFn) {
     throw new Error('generateTriageQuestions: providerFn الزامی است (mock برای تست، provider واقعی در تولید).');
   }
-  return generateTriageQuestionsCore({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory, providerFn });
+  return generateTriageQuestionsCore({
+    presentingProblemId,
+    initialDescription,
+    age,
+    sex,
+    weightKg,
+    patientHistory,
+    medicalHistory,
+    providerFn,
+  });
 }
+
+module.exports = {
+  runAiTriageAnalysis,
+  mapInternalToExternalUrgency,
+  generateTriageQuestions,
+};
