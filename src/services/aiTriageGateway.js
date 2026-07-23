@@ -1,5 +1,6 @@
 const AppError = require("../utils/AppError");
 const { createGroqProvider } = require("../ai/providers/groqProvider");
+const { ResponseValidationError } = require("../ai/responseValidator");
 
 function resolveProviderFn(mode = "triage") {
   const aiModel = process.env.AI_MODEL || "";
@@ -11,9 +12,9 @@ function resolveProviderFn(mode = "triage") {
       return async () => ({
         rawText: JSON.stringify({
           questions: [
-            { questionText: "Ø¹Ù„Ø§Ø¦Ù… Ø´Ù…Ø§ Ø§Ø² Ú†Ù‡ Ø²Ù…Ø§Ù†ÛŒ Ø´Ø±ÙˆØ¹ Ø´Ø¯Ù‡ØŸ", options: ["Ø§Ù…Ø±ÙˆØ²", "Û²-Û³ Ø±ÙˆØ² Ù¾ÛŒØ´", "Ø¨ÛŒØ´ Ø§Ø² ÛŒÚ© Ù‡ÙØªÙ‡", "Ø¨ÛŒØ´ Ø§Ø² ÛŒÚ© Ù…Ø§Ù‡"] },
-            { questionText: "Ø´Ø¯Øª Ø¯Ø±Ø¯ Ø±Ø§ Ú†Ú¯ÙˆÙ†Ù‡ ØªÙˆØµÛŒÙ Ù…ÛŒâ€ŒÚ©Ù†ÛŒØ¯ØŸ", options: ["Ø®ÙÛŒÙ", "Ù…ØªÙˆØ³Ø·", "Ø´Ø¯ÛŒØ¯"] },
-            { questionText: "Ø¢ÛŒØ§ ØªØ¨ Ù‡Ù… Ø¯Ø§Ø±ÛŒØ¯ØŸ", options: ["Ø¨Ù„Ù‡", "Ø®ÛŒØ±", "Ù…Ø·Ù…Ø¦Ù† Ù†ÛŒØ³ØªÙ…"] },
+            { questionText: "Ã˜Â¹Ã™â€žÃ˜Â§Ã˜Â¦Ã™â€¦ Ã˜Â´Ã™â€¦Ã˜Â§ Ã˜Â§Ã˜Â² Ãšâ€ Ã™â€¡ Ã˜Â²Ã™â€¦Ã˜Â§Ã™â€ Ã›Å’ Ã˜Â´Ã˜Â±Ã™Ë†Ã˜Â¹ Ã˜Â´Ã˜Â¯Ã™â€¡Ã˜Å¸", options: ["Ã˜Â§Ã™â€¦Ã˜Â±Ã™Ë†Ã˜Â²", "Ã›Â²-Ã›Â³ Ã˜Â±Ã™Ë†Ã˜Â² Ã™Â¾Ã›Å’Ã˜Â´", "Ã˜Â¨Ã›Å’Ã˜Â´ Ã˜Â§Ã˜Â² Ã›Å’ÃšÂ© Ã™â€¡Ã™ÂÃ˜ÂªÃ™â€¡", "Ã˜Â¨Ã›Å’Ã˜Â´ Ã˜Â§Ã˜Â² Ã›Å’ÃšÂ© Ã™â€¦Ã˜Â§Ã™â€¡"] },
+            { questionText: "Ã˜Â´Ã˜Â¯Ã˜Âª Ã˜Â¯Ã˜Â±Ã˜Â¯ Ã˜Â±Ã˜Â§ Ãšâ€ ÃšÂ¯Ã™Ë†Ã™â€ Ã™â€¡ Ã˜ÂªÃ™Ë†Ã˜ÂµÃ›Å’Ã™Â Ã™â€¦Ã›Å’Ã¢â‚¬Å’ÃšÂ©Ã™â€ Ã›Å’Ã˜Â¯Ã˜Å¸", options: ["Ã˜Â®Ã™ÂÃ›Å’Ã™Â", "Ã™â€¦Ã˜ÂªÃ™Ë†Ã˜Â³Ã˜Â·", "Ã˜Â´Ã˜Â¯Ã›Å’Ã˜Â¯"] },
+            { questionText: "Ã˜Â¢Ã›Å’Ã˜Â§ Ã˜ÂªÃ˜Â¨ Ã™â€¡Ã™â€¦ Ã˜Â¯Ã˜Â§Ã˜Â±Ã›Å’Ã˜Â¯Ã˜Å¸", options: ["Ã˜Â¨Ã™â€žÃ™â€¡", "Ã˜Â®Ã›Å’Ã˜Â±", "Ã™â€¦Ã˜Â·Ã™â€¦Ã˜Â¦Ã™â€  Ã™â€ Ã›Å’Ã˜Â³Ã˜ÂªÃ™â€¦"] },
           ],
         }),
         meta: { provider: "mock", model: "mock-v1" },
@@ -116,7 +117,7 @@ function getPresentingProblems() {
 // in src/ai/index.js already destructures patientHistory and medicalHistory as
 // top-level params, so passing them as siblings is correct for THIS function.
 // Only added medicalHistory (was previously missing entirely).
-function generateQuestions({ presentingProblemId, age, patientDetails = {}, patientHistory, medicalHistory }) {
+async function generateQuestions({ presentingProblemId, age, patientDetails = {}, patientHistory, medicalHistory }) {
   let aiModule;
   try {
     aiModule = require("../ai");
@@ -130,15 +131,30 @@ function generateQuestions({ presentingProblemId, age, patientDetails = {}, pati
 
   const providerFn = resolveProviderFn("questions");
 
-  return aiModule.generateTriageQuestions({
-    presentingProblemId,
-    age,
-    sex: patientDetails.gender,
-    weightKg: patientDetails.weightKg ?? patientDetails.weight,
-    providerFn,
-    patientHistory: patientHistory || [],
-    medicalHistory,
-  });
+  try {
+    return await aiModule.generateTriageQuestions({
+      presentingProblemId,
+      age,
+      sex: patientDetails.gender,
+      weightKg: patientDetails.weightKg ?? patientDetails.weight,
+      providerFn,
+      patientHistory: patientHistory || [],
+      medicalHistory,
+    });
+  } catch (err) {
+    // 2026-07-23 (AI team fix): even with the retry AI-side now does, a
+    // rare persistent validation failure would otherwise surface as a raw
+    // 500 (errorHandler.js only recognizes AppError). Convert it to a
+    // clean, actionable 422 the Frontend can show a retry button for.
+    if (err instanceof ResponseValidationError) {
+      throw new AppError(
+        "سؤالات تولیدشده توسط AI معتبر نبودند — لطفاً دوباره تلاش کنید.",
+        422,
+        err.code
+      );
+    }
+    throw err;
+  }
 }
 
 module.exports = { runAiTriageAnalysis, toAiPatientResponses, getPresentingProblems, generateQuestions };
