@@ -128,9 +128,22 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
  * *** قابلیت جدید — orchestrator مرحله‌ی تولید سؤال پویا. ***
  * به دستور صریح مدیر پروژه، بر اساس نمونه‌ی هاردکد مدیرعامل سینا.
  *
+ * *** به‌روزرسانی (باگ کشف‌شده در production، همین گفتگو): retry خودکار ***
+ * مدل گاهی تعداد سؤالات یا شکل پاسخ درستی برنمی‌گرداند (مثلاً ۳ سؤال
+ * به‌جای ۵) — این یک نوسان طبیعی مدل است، نه لزوماً خطای دائمی. قبل از
+ * این تغییر، اولین شکست اعتبارسنجی مستقیم throw می‌شد و در نهایت به یک
+ * کرش ۵۰۰ خام در Backend منتهی می‌شد (چون ResponseValidationError یک
+ * AppError نیست و errorHandler.js آن را نمی‌شناسد — این بخش دوم مشکل
+ * در Backend است، نگاه کن به یادداشت پیشنهادی برای aiTriageGateway.js).
+ * اینجا فقط روی ResponseValidationError (مشکل شکل/تعداد پاسخ) یک retry
+ * انجام می‌شود — نه روی خطای اتصال/provider (AIConnectorError)، چون آن
+ * نوع خطا نشانه‌ی مشکل شبکه/سرویس است، نه نوسان مدل، و retry فوری
+ * معمولاً کمکی نمی‌کند.
+ *
  * *** تصمیم طراحی مهم که باید تأیید شود: در صورت خطا (AIConnectorError یا
- * ResponseValidationError)، این تابع بر خلاف runAiTriageAnalysisCore،
- * fallback نمی‌سازد — خطا را مستقیماً بالا می‌فرستد (throw می‌کند). ***
+ * ResponseValidationError که حتی بعد از retry هم برطرف نشد)، این تابع بر
+ * خلاف runAiTriageAnalysisCore، fallback نمی‌سازد — خطا را مستقیماً بالا
+ * می‌فرستد (throw می‌کند). ***
  * دلیل: تولید سؤالات بالینی جعلی وقتی AI شکست خورده، همان ریسک ساختن
  * محتوای بالینی حدسی است که در کل این پروژه ممنوع شده. تصمیم گرفتن
  * درباره‌ی این‌که Backend در این حالت چه کند (مثلاً رد شدن از این مرحله
@@ -166,9 +179,33 @@ async function generateTriageQuestionsCore({
     patientHistory,
     medicalHistory,
   });
-  const providerResult = await callAIProvider(prompt, providerFn);
-  const validated = validateQuestionsResponse(providerResult.rawText);
-  return validated;
+
+  const MAX_ATTEMPTS = 2; // ۱ تلاش اصلی + ۱ retry — فقط برای خطای اعتبارسنجی
+  let lastValidationError;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // callAIProvider عمداً بیرون try است: خطای اتصال/provider (AIConnectorError)
+    // نباید retry شود و باید فوراً بالا برود — طبق طراحی مستندشده بالا.
+    const providerResult = await callAIProvider(prompt, providerFn);
+
+    try {
+      return validateQuestionsResponse(providerResult.rawText);
+    } catch (err) {
+      if (!(err instanceof ResponseValidationError)) {
+        throw err;
+      }
+      lastValidationError = err;
+      // فقط لاگ برای مشاهده‌پذیری — بدون هیچ داده‌ی بیمار در پیام.
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(
+          `generateTriageQuestionsCore: تلاش ${attempt} با خطای اعتبارسنجی شکست خورد (${err.code})، در حال retry...`
+        );
+      }
+    }
+  }
+
+  // هر دو تلاش شکست خوردند — همان خطای اعتبارسنجی نهایی را بالا می‌فرستیم.
+  throw lastValidationError;
 }
 
 module.exports = {
