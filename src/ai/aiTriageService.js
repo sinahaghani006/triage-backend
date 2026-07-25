@@ -20,9 +20,14 @@
  * وابستگی خاص قفل نشود.
  */
 
-const { generateTriagePrompt, generateQuestionsPrompt } = require('./promptGenerator');
+const { generateTriagePrompt, generateQuestionsPrompt, generateSecondRoundPrompt } = require('./promptGenerator');
 const { callAIProvider, AIConnectorError } = require('./aiConnector');
-const { validateAIResponse, validateQuestionsResponse, ResponseValidationError } = require('./responseValidator');
+const {
+  validateAIResponse,
+  validateQuestionsResponse,
+  validateSecondRoundResponse,
+  ResponseValidationError,
+} = require('./responseValidator');
 const {
   buildTriageResultFromAI,
   buildFallbackTriageResult,
@@ -208,7 +213,118 @@ async function generateTriageQuestionsCore({
   throw lastValidationError;
 }
 
+/**
+ * *** قابلیت جدید — orchestrator دور دوم جریان پرسش دومرحله‌ای. ***
+ * تأیید مدیر پروژه در همین گفتگو. نگاه کن به generateSecondRoundPrompt
+ * (promptGenerator.js) و SecondRoundQuestionsSchema/SecondRoundEscalationSchema
+ * (schemas.js) برای طراحی کامل.
+ *
+ * *** طراحی کلیدی: در حالت escalate:true، این تابع مستقیماً از
+ * buildTriageResultFromAI (همان تابعی که تصمیم نهایی معمول استفاده
+ * می‌کند) بازاستفاده می‌کند — چون خروجی escalate:true دقیقاً همان شکل
+ * AIRawResponseSchema را دارد (به‌علاوه‌ی فیلد escalate که بی‌ضرر است).
+ * این یعنی صفر منطق تکراری برای ساخت TriageResult در این مسیر. ***
+ *
+ * *** رفتار خطا: مشابه generateTriageQuestionsCore، یک retry خودکار
+ * فقط روی ResponseValidationError انجام می‌شود (نه AIConnectorError).
+ * اگر بعد از retry هم شکست بخورد، خطا مستقیماً throw می‌شود — این تابع
+ * هیچ fallback خاموشی نمی‌سازد، چون تصمیم درباره‌ی رفتار Backend در
+ * این حالت (مثلاً رد شدن از دور دوم) باید توسط مدیر پروژه مشخص شود؛
+ * دقیقاً هم‌راستا با تصمیم مستندشده‌ی generateTriageQuestionsCore. ***
+ *
+ * @param {object} params
+ * @param {string} params.sessionId
+ * @param {string} params.presentingProblemId
+ * @param {number} params.age
+ * @param {'male'|'female'} params.sex
+ * @param {number} params.weightKg
+ * @param {number} [params.heightCm]
+ * @param {string[]} params.round1QuestionsAsked - دقیقاً ۵ سؤال دور اول
+ * @param {string[]} params.round1Responses - دقیقاً ۵ پاسخ دور اول
+ * @param {Array} [params.patientHistory]
+ * @param {object} [params.medicalHistory]
+ * @param {function} params.providerFn
+ * @returns {Promise<{escalate:false, questions: Array} | {escalate:true, urgencyLevel:string, triageResultJson:object}>}
+ * @throws {AIConnectorError | ResponseValidationError | Error}
+ */
+async function generateSecondRoundCore({
+  sessionId,
+  presentingProblemId,
+  age,
+  sex,
+  weightKg,
+  heightCm,
+  round1QuestionsAsked = [],
+  round1Responses = [],
+  patientHistory = [],
+  medicalHistory,
+  providerFn,
+}) {
+  const prompt = generateSecondRoundPrompt({
+    presentingProblemId,
+    age,
+    sex,
+    weightKg,
+    heightCm,
+    round1QuestionsAsked,
+    round1Responses,
+    patientHistory,
+    medicalHistory,
+  });
+
+  const MAX_ATTEMPTS = 2; // ۱ تلاش اصلی + ۱ retry — فقط برای خطای اعتبارسنجی
+  let lastValidationError;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // callAIProvider عمداً بیرون try است: خطای اتصال نباید retry شود.
+    const providerResult = await callAIProvider(prompt, providerFn);
+
+    try {
+      const validated = validateSecondRoundResponse(providerResult.rawText);
+
+      if (validated.escalate === true) {
+        const triageResult = buildTriageResultFromAI({
+          aiRaw: validated,
+          meta: providerResult.meta,
+          sessionId,
+          presentingProblemId,
+          questionsAsked: round1QuestionsAsked,
+          patientResponses: round1Responses,
+        });
+
+        const finalValidated = TriageResultSchema.safeParse(triageResult);
+        if (!finalValidated.success) {
+          throw new Error(
+            `generateSecondRoundCore: triageResult ساخته‌شده (حالت escalate) با TriageResultSchema مطابقت ندارد: ${finalValidated.error.message}`
+          );
+        }
+
+        return {
+          escalate: true,
+          urgencyLevel: finalValidated.data.urgency_level,
+          triageResultJson: finalValidated.data,
+        };
+      }
+
+      return { escalate: false, questions: validated.questions };
+    } catch (err) {
+      if (!(err instanceof ResponseValidationError)) {
+        throw err;
+      }
+      lastValidationError = err;
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(
+          `generateSecondRoundCore: تلاش ${attempt} با خطای اعتبارسنجی شکست خورد (${err.code})، در حال retry...`
+        );
+      }
+    }
+  }
+
+  throw lastValidationError;
+}
+
 module.exports = {
   runAiTriageAnalysisCore,
   generateTriageQuestionsCore,
+  generateSecondRoundCore,
 };

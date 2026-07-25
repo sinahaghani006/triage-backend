@@ -123,6 +123,49 @@ const TriageQuestionsRawSchema = z.object({
   questions: z.array(TriageQuestionSchema),
 });
 
+/**
+ * *** قابلیت جدید — جریان پرسش دومرحله‌ای، تأیید مدیر پروژه در همین گفتگو. ***
+ *
+ * طرح: ۵ سؤال دور اول → پاسخ کاربر → این مرحله (دور دوم) → یا (الف) ۵
+ * سؤال دور دوم عمیق‌تر، یا (ب) تصمیم نهایی زودهنگام اگر دور اول سیگنال
+ * فوریت واضح داده باشد.
+ *
+ * *** قانون escalate-only در این چک‌پوینت — حیاتی: ***
+ * ESCALATE_ONLY_URGENCY_LEVELS عمداً فقط شامل doctor_review و emergency
+ * است. این چک‌پوینت هرگز اجازه ندارد به‌جای دور دوم، تصمیم normal یا
+ * home_care بگیرد — چون کل هدف دور دوم، دقت بیشتر برای موارد کم‌فوریت
+ * است؛ فقط ایمنی (سیگنال فوریت واضح) توجیه‌کننده‌ی رد شدن از این دقت
+ * است، نه هیچ چیز دیگر. این مرز در سطح schema (نه فقط در پرامپت) بسته
+ * شده تا فقط به قول مدل متکی نباشد.
+ */
+const ESCALATE_ONLY_URGENCY_LEVELS = ['doctor_review', 'emergency'];
+
+/**
+ * SecondRoundQuestionsSchema — حالت escalate:false. دقیقاً همان ساختار
+ * ۵ سؤال دور اول (TriageQuestionSchema)، بدون تغییر شکل.
+ */
+const SecondRoundQuestionsSchema = z.object({
+  escalate: z.boolean(),
+  questions: z.array(TriageQuestionSchema).default([]),
+});
+
+/**
+ * SecondRoundEscalationSchema — حالت escalate:true. دقیقاً همان فیلدهای
+ * AIRawResponseSchema (تصمیم نهایی) با یک محدودیت اضافه: urgency_suggestion
+ * فقط می‌تواند doctor_review یا emergency باشد، نه normal/home_care.
+ * این هم‌شکلی عمدی است — یعنی خروجی این حالت مستقیماً (بدون تبدیل) به
+ * buildTriageResultFromAI در urgencyClassifier.js قابل‌پاس‌دادن است.
+ */
+const SecondRoundEscalationSchema = z.object({
+  escalate: z.boolean(),
+  urgency_suggestion: z.enum(ESCALATE_ONLY_URGENCY_LEVELS),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().min(1),
+  clinical_alerts: z.array(z.string()).default([]),
+  recommendations: z.array(z.string()).default([]),
+  is_complete: z.boolean(),
+});
+
 module.exports = {
   URGENCY_LEVELS,
   PatientContextSchema,
@@ -131,4 +174,7 @@ module.exports = {
   TriageResultSchema,
   TriageQuestionSchema,
   TriageQuestionsRawSchema,
+  ESCALATE_ONLY_URGENCY_LEVELS,
+  SecondRoundQuestionsSchema,
+  SecondRoundEscalationSchema,
 };

@@ -24,7 +24,7 @@
  * این فرض باید توسط مدیر پروژه تأیید یا اصلاح شود.
  */
 
-const { runAiTriageAnalysisCore, generateTriageQuestionsCore } = require('./aiTriageService');
+const { runAiTriageAnalysisCore, generateTriageQuestionsCore, generateSecondRoundCore } = require('./aiTriageService');
 
 const INTERNAL_TO_EXTERNAL_URGENCY_MAP = {
   normal: 'normal',
@@ -135,4 +135,75 @@ module.exports = {
   runAiTriageAnalysis,
   mapInternalToExternalUrgency,
   generateTriageQuestions,
+  generateSecondRoundQuestions,
 };
+
+/**
+ * *** قابلیت جدید — نقطه ورود دور دوم جریان پرسش دومرحله‌ای. ***
+ * تأیید مدیر پروژه در همین گفتگو. فراخوانی بعد از این‌که کاربر به ۵
+ * سؤال دور اول پاسخ داد. کاملاً مستقل از generateTriageQuestions و
+ * runAiTriageAnalysis — هیچ‌کدام را جایگزین یا تغییر نمی‌دهد.
+ *
+ * *** نگاشت urgency (فقط در حالت escalate:true): ***
+ * دقیقاً همان نگاشت home_care→home_treatment که در runAiTriageAnalysis
+ * استفاده می‌شود، اینجا هم لازم است — چون در حالت escalate، خروجی این
+ * تابع همان شکل TriageResult نهایی را دارد که Backend مستقیم ثبت می‌کند.
+ * (در عمل urgency همیشه doctor_review یا emergency است — که هیچ‌کدام
+ * نگاشت غیریک‌به‌یک ندارند — ولی از همان تابع مشترک استفاده می‌شود تا
+ * منطق نگاشت یک‌جا و بدون تکرار بماند.)
+ *
+ * @param {object} params
+ * @param {string} params.sessionId
+ * @param {string} params.presentingProblemId
+ * @param {number} params.age
+ * @param {'male'|'female'} params.sex
+ * @param {number} params.weightKg
+ * @param {number} [params.heightCm]
+ * @param {string[]} params.round1QuestionsAsked - دقیقاً ۵ سؤال دور اول
+ * @param {string[]} params.round1Responses - دقیقاً ۵ پاسخ دور اول
+ * @param {Array} [params.patientHistory]
+ * @param {object} [params.medicalHistory]
+ * @param {function} params.providerFn
+ * @returns {Promise<{escalate:false, questions: Array} | {escalate:true, urgencyLevel:string, triageResultJson:object}>}
+ */
+async function generateSecondRoundQuestions({
+  sessionId,
+  presentingProblemId,
+  age,
+  sex,
+  weightKg,
+  heightCm,
+  round1QuestionsAsked,
+  round1Responses,
+  patientHistory = [],
+  medicalHistory,
+  providerFn,
+}) {
+  if (!providerFn) {
+    throw new Error('generateSecondRoundQuestions: providerFn الزامی است (mock برای تست، provider واقعی در تولید).');
+  }
+
+  const result = await generateSecondRoundCore({
+    sessionId,
+    presentingProblemId,
+    age,
+    sex,
+    weightKg,
+    heightCm,
+    round1QuestionsAsked,
+    round1Responses,
+    patientHistory,
+    medicalHistory,
+    providerFn,
+  });
+
+  if (result.escalate === true) {
+    return {
+      escalate: true,
+      urgencyLevel: mapInternalToExternalUrgency(result.urgencyLevel),
+      triageResultJson: result.triageResultJson,
+    };
+  }
+
+  return result; // { escalate: false, questions: [...] }
+}

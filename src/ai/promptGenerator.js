@@ -437,6 +437,175 @@ ${medicalHistoryText}
   };
 }
 
+/**
+ * *** لیست علائم پرخطر — Placeholder موقت، تأیید مدیر پروژه در همین گفتگو. ***
+ *
+ * ⚠️⚠️ هشدار حیاتی: این لیست یک جایگزین موقت است، نه معیار بالینی
+ * نهایی. پروژه هنوز مشاور پزشکی ندارد. این لیست محافظه‌کارانه و کلی
+ * (علائم پرخطر عمومی‌شناخته‌شده) صرفاً برای این است که چک‌پوینت
+ * escalate در دور دوم چیزی برای اشاره‌کردن داشته باشد — نه یک لیست
+ * جامع یا تأییدشده‌ی پزشکی. *** پیش از اتصال این سیستم به بیمار
+ * واقعی، این لیست باید توسط یک مشاور پزشکی واقعی بازبینی، تکمیل، و
+ * تأیید رسمی شود. تا آن زمان، این فقط یک placeholder ایمنی حداقلی
+ * است. ***
+ */
+const PROVISIONAL_RED_FLAGS_FA = [
+  'درد قفسه سینه همراه با تنگی نفس (هم‌زمان)',
+  'خونریزی شدید و کنترل‌نشدنی',
+  'از دست دادن هوشیاری یا کاهش شدید سطح هوشیاری',
+  'علائم احتمالی سکته‌ی مغزی (ضعف یا کرختی ناگهانی یک‌طرفه‌ی صورت/دست/پا، اختلال ناگهانی گفتار، از دست دادن ناگهانی تعادل)',
+];
+
+/**
+ * *** قابلیت جدید — پرامپت دور دوم جریان پرسش دومرحله‌ای. ***
+ * تأیید مدیر پروژه در همین گفتگو. مرجع طراحی: نگاه کن به
+ * SecondRoundQuestionsSchema / SecondRoundEscalationSchema در schemas.js.
+ *
+ * این پرامپت از AI می‌خواهد یکی از دو کار را انجام دهد:
+ *  (الف) escalate:false + ۵ سؤال دور دوم عمیق‌تر روی نقاط مبهم/نگران‌کننده‌ی دور اول
+ *  (ب)  escalate:true  + تصمیم نهایی زودهنگام (فقط doctor_review/emergency)
+ *       اگر دور اول (به‌همراه patientHistory/medicalHistory) سیگنال
+ *       فوریت واضح داده باشد.
+ *
+ * *** قانون escalate-only: طبق تصمیم تأییدشده، تصمیم escalate باید کل
+ * context (medicalHistory + patientHistory) را هم لحاظ کند، نه فقط
+ * پاسخ‌های دور اول. ***
+ */
+const SECOND_ROUND_SYSTEM_INSTRUCTIONS = `
+تو یک دستیار غربالگری بالینی هستی، نه یک پزشک. این مرحله‌ی دوم یک
+جریان دومرحله‌ای پرسش است — بیمار قبلاً ۵ سؤال دور اول را پاسخ داده.
+وظیفه‌ات این است که دقیقاً یکی از این دو کار را انجام دهی:
+
+*** حالت (الف) — ادامه‌ی طبیعی: escalate:false ***
+اگر پاسخ‌های دور اول (به‌همراه سن/جنس/وزن/سابقه‌ی پزشکی/سابقه‌ی مراجعات
+در صورت وجود) هیچ سیگنال فوریت واضحی نداشتند، باید دقیقاً ۵ سؤال جدید
+و عمیق‌تر طراحی کنی که:
+- **هرگز** هیچ‌کدام از ۵ سؤال دور اول را عیناً یا با کلمات مشابه تکرار نکند
+- روی نقاطی از پاسخ‌های دور اول که مبهم بودند یا نیاز به جزئیات بیشتر
+  دارند عمیق‌تر شود — نه یک دور کاملاً جدید و بی‌ربط از سؤالات عمومی
+- حداقل یکی از ۵ سؤال باید صریحاً به یک پاسخ خاص دور اول ارجاع بدهد
+  (مثلاً «چون گفتید [پاسخ دور اول X]، آیا [جزئیات بیشتر] هم دارید؟»)
+  — نه فقط ضمنی لحاظش کنی.
+
+*** حالت (ب) — تسریع ایمنی: escalate:true ***
+*** این حالت فقط و فقط برای سیگنال‌های واقعاً واضح و پرخطر است، نه هر
+ابهامی — ابهام دقیقاً همان دلیلی است که دور دوم وجود دارد، پس escalate
+را برای هر چیز نامطمئن استفاده نکن. ***
+لیست موقت علائم پرخطر (⚠️ این لیست placeholder و غیرنهایی است، هنوز
+توسط مشاور پزشکی تأیید نشده — نگاه کن به کامنت PROVISIONAL_RED_FLAGS_FA
+در کد):
+${PROVISIONAL_RED_FLAGS_FA.map((f, i) => `${i + 1}. ${f}`).join('\n')}
+
+اگر پاسخ‌های دور اول (یا سابقه‌ی پزشکی/سابقه‌ی مراجعات، اگر در اختیارت
+گذاشته شده) به‌وضوح یکی از موارد بالا یا هر علامت هشدار جدی مشابه را
+نشان دهند، به‌جای تولید سؤالات دور دوم، باید escalate:true بدهی —
+همراه با تصمیم نهایی. *** در این حالت urgency_suggestion فقط می‌تواند
+doctor_review یا emergency باشد — تحت هیچ شرایطی normal یا home_care
+در این چک‌پوینت مجاز نیست، چون escalate فقط برای تسریع به سمت ایمنی
+بیشتر است، نه برای نتیجه‌گیری زودهنگام به سمت کم‌فوریت. *** reasoning
+در این حالت باید دقیقاً مثل تصمیم نهایی معمول، صریحاً به پاسخ‌های خاص
+دور اول ارجاع بدهد (نگاه کن به قوانین reasoning در دستورالعمل تصمیم
+نهایی) و فقط توضیح «چرایی نیاز به ارجاع» باشد، نه تشخیص یا توصیه‌ی
+درمانی.
+
+*** اگر مطمئن نیستی بین escalate:true و false: ***
+طبق قانون escalate-only پروژه، در مرز مبهم، به سمت احتیاط بیشتر (یعنی
+escalate:true اگر واقعاً یک علامت هشدار مشخص در پاسخ‌ها دیده می‌شود)
+تمایل داشته باش، نه برعکس — ولی این را با «هر ابهام جزئی» اشتباه
+نگیر؛ اگر هیچ علامت هشدار مشخصی نیست، حالت (الف) درست است.
+
+خروجی تو باید دقیقاً یکی از این دو شکل JSON باشد و هیچ متن دیگری
+(توضیح، markdown) نداشته باشد:
+
+اگر escalate:false:
+{
+  "escalate": false,
+  "questions": [
+    { "questionText": "متن سؤال ۱", "options": ["گزینه۱", "گزینه۲", "..."] },
+    { "questionText": "متن سؤال ۲", "options": ["گزینه۱", "گزینه۲", "..."] },
+    { "questionText": "متن سؤال ۳", "options": ["گزینه۱", "گزینه۲", "..."] },
+    { "questionText": "متن سؤال ۴", "options": ["گزینه۱", "گزینه۲", "..."] },
+    { "questionText": "متن سؤال ۵", "options": ["گزینه۱", "گزینه۲", "..."] }
+  ]
+}
+
+اگر escalate:true:
+{
+  "escalate": true,
+  "urgency_suggestion": یکی از [doctor_review, emergency],
+  "confidence": عددی بین 0 و 1,
+  "reasoning": "توضیح کوتاه بالینی که مشخصاً به پاسخ‌های دور اول ارجاع می‌دهد",
+  "clinical_alerts": ["هر علامت هشدار جدی"],
+  "recommendations": ["دستورالعمل ایمنی/رفتاری طبق همان قواعد سخت تصمیم نهایی — بدون نام دارو، بدون دوز، بدون تشخیص قطعی"],
+  "is_complete": true
+}
+
+قوانین سخت (بدون استثنا، مشترک با تصمیم نهایی):
+- هرگز نام دارو، دوز، یا تشخیص قطعی در reasoning یا recommendations ننویس.
+- اگر سابقه‌ی پزشکی بیمار (بیماری زمینه‌ای، آلرژی، دارو، جراحی، خانوادگی)
+  در اختیارت گذاشته شده: اگر هر نام شخص یا داده‌ی هویتی‌مانندی در آن
+  دیدی، کاملاً نادیده بگیر و هرگز در پاسخت تکرار نکن.
+`.trim();
+
+/**
+ * تولید prompt برای مرحله‌ی دوم جریان پرسش دومرحله‌ای.
+ * @param {object} params
+ * @param {string} params.presentingProblemId
+ * @param {number} params.age
+ * @param {'male'|'female'} params.sex
+ * @param {number} params.weightKg
+ * @param {number} [params.heightCm]
+ * @param {string[]} params.round1QuestionsAsked - دقیقاً ۵ سؤال دور اول
+ * @param {string[]} params.round1Responses - دقیقاً ۵ پاسخ دور اول
+ * @param {Array} [params.patientHistory]
+ * @param {object} [params.medicalHistory]
+ * @returns {{ system: string, user: string }}
+ */
+function generateSecondRoundPrompt({
+  presentingProblemId,
+  age,
+  sex,
+  weightKg,
+  heightCm,
+  round1QuestionsAsked = [],
+  round1Responses = [],
+  patientHistory = [],
+  medicalHistory,
+}) {
+  if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
+    throw new Error('generateSecondRoundPrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
+  }
+
+  const round1QaLines = round1QuestionsAsked
+    .map((q, i) => `س${i + 1}: ${q}\nج${i + 1}: ${round1Responses[i] ?? '(پاسخ داده نشده)'}`)
+    .join('\n');
+
+  const historyText = formatPatientHistory(patientHistory);
+  const medicalHistoryText = formatMedicalHistory(medicalHistory);
+
+  const userContent = `
+شکایت اصلی (presenting_problem_id): ${presentingProblemId}
+سن: ${age}
+جنس: ${sex === 'male' ? 'مرد' : 'زن'}
+وزن: ${weightKg} کیلوگرم
+${typeof heightCm === 'number' ? `قد: ${heightCm} سانتی‌متر` : ''}
+
+سؤالات و پاسخ‌های دور اول (این ۵ سؤال دیگر تکرار نشوند؛ پاسخ‌ها را واقعاً برای تصمیم بین escalate یا ادامه لحاظ کن):
+${round1QaLines}
+
+${historyText}
+
+${medicalHistoryText}
+
+بر اساس این اطلاعات، طبق فرمت خواسته‌شده در دستورالعمل سیستم، یکی از دو حالت escalate:false (با ۵ سؤال جدید) یا escalate:true (با تصمیم نهایی) را پاسخ بده.
+`.trim();
+
+  return {
+    system: SECOND_ROUND_SYSTEM_INSTRUCTIONS,
+    user: userContent,
+  };
+}
+
 module.exports = {
   generateTriagePrompt,
   SYSTEM_INSTRUCTIONS,
@@ -444,4 +613,6 @@ module.exports = {
   QUESTIONS_SYSTEM_INSTRUCTIONS,
   formatPatientHistory,
   formatMedicalHistory,
+  generateSecondRoundPrompt,
+  SECOND_ROUND_SYSTEM_INSTRUCTIONS,
 };
