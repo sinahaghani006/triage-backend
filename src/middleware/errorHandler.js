@@ -2,15 +2,30 @@ const AppError = require('../utils/AppError');
 const { recordError } = require('../services/errorLogService');
 
 // Centralized error handler: guarantees every response has a JSON body
-// with a stable shape and a correct HTTP status code — no raw stack
+// with a stable shape and a correct HTTP status code â€” no raw stack
 // traces leak to the client, and nothing crashes the process.
 // Every 5xx (unexpected errors, and AppErrors with a 5xx statusCode, e.g.
 // AI_SERVICE_UNAVAILABLE) is persisted to ErrorLogs; 4xx AppErrors (bad
 // input, wrong credentials, invalid state transitions) are expected,
 // client-caused, and not logged as errors.
+// 2026-07-24: these AppError codes are technically 4xx (so the request
+// itself gets a clean client response), but the ROOT CAUSE is not the
+// client -- it's AI provider/model behavior we need visibility into.
+// Logged regardless of status code so we can measure real occurrence
+// rate, unlike genuine client mistakes (bad input, wrong password, etc.)
+// which stay unlogged by design.
+const AI_DIAGNOSTIC_CODES = new Set([
+  'QUESTIONS_COUNT_MISMATCH',
+  'QUESTIONS_SCHEMA_MISMATCH',
+  'LANGUAGE_ARTIFACT_DETECTED',
+  'INVALID_JSON',
+  'SCHEMA_MISMATCH',
+  'AI_SERVICE_UNAVAILABLE',
+]);
+
 function errorHandler(err, req, res, _next) {
   if (err instanceof AppError) {
-    if (err.statusCode >= 500) {
+    if (err.statusCode >= 500 || AI_DIAGNOSTIC_CODES.has(err.code)) {
       recordError({
         code: err.code,
         message: err.message,
@@ -30,7 +45,7 @@ function errorHandler(err, req, res, _next) {
     });
   }
 
-  // Unexpected/programmer error — don't leak internals to the client.
+  // Unexpected/programmer error â€” don't leak internals to the client.
   recordError({
     message: err.message,
     stack: err.stack,
