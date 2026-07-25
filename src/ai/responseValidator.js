@@ -61,17 +61,34 @@ function validateAIResponse(rawText) {
   return result.data;
 }
 
-const ACCENTED_LATIN_PATTERN = /[À-ÿ\u1E00-\u1EFF]/;
+/**
+ * *** به‌روزرسانی — باگ کشف‌شده در production (همین گفتگو، تست واقعی). ***
+ * الگوی قبلی (فقط حروف لاتین accented مثل ویتنامی) یک نمونه‌ی واقعی را
+ * نگرفت: کاراکتر چینی «过去» (به معنی «قبلاً») وسط یک سؤال فارسی نشت
+ * کرده بود و از فیلتر رد شده بود. این الگو حالا علاوه بر لاتین accented،
+ * بازه‌های یونیکد CJK (چینی/ژاپنی/کره‌ای) را هم پوشش می‌دهد:
+ *   - CJK Unified Ideographs (چینی رایج): \u4E00-\u9FFF
+ *   - CJK Extension A (چینی کمیاب‌تر): \u3400-\u4DBF
+ *   - هیراگانا (ژاپنی): \u3040-\u309F
+ *   - کاتاکانا (ژاپنی): \u30A0-\u30FF
+ *   - هانگول/کره‌ای: \uAC00-\uD7A3 و \u1100-\u11FF
+ * این هنوز یک فیلتر heuristic است، نه پوشش کامل همه‌ی زبان‌های دنیا —
+ * اگر بعداً نمونه‌ی نشت از زبان دیگری (مثلاً عربی با کاراکتر غیرمعمول،
+ * یا سیریلیک) دیده شد، باید دوباره طبق همین الگو (با شواهد واقعی) گسترش
+ * یابد.
+ */
+const FOREIGN_LANGUAGE_ARTIFACT_PATTERN =
+  /[À-ÿ\u1E00-\u1EFF\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7A3\u1100-\u11FF]/;
 
 function containsForeignLanguageArtifact(text) {
-  return typeof text === 'string' && ACCENTED_LATIN_PATTERN.test(text);
+  return typeof text === 'string' && FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(text);
 }
 
 function stripForeignLanguageArtifacts(text) {
   if (typeof text !== 'string') return text;
   const cleaned = text
     .split(/\s+/)
-    .filter((word) => !ACCENTED_LATIN_PATTERN.test(word))
+    .filter((word) => !FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word))
     .join(' ')
     .replace(/\s+([.,،؛])/g, '$1')
     .trim();
