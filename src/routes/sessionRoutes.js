@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const sessionsController = require('../controllers/sessionsController');
 const authenticate = require('../middleware/authenticate');
 const requireRole = require('../middleware/requireRole');
@@ -19,6 +19,12 @@ router.post(
   sessionIdParamValidator,
   validateRequest,
   sessionsController.generateSessionQuestions,
+);
+router.post(
+  '/:id/second-round-questions',
+  sessionIdParamValidator,
+  validateRequest,
+  sessionsController.secondRoundQuestions,
 );
 router.post(
   '/:id/submit-symptoms',

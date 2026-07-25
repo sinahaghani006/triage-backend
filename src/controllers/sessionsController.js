@@ -4,7 +4,7 @@ const { canTransition, resolveStateForUrgency, AUTO_FINALIZE_STATES } = require(
 const { runAiTriageAnalysis } = require('../services/aiTriageGateway');
 const { recordAudit } = require('../services/auditLogService');
 const calculateAge = require('../utils/calculateAge');
-const { generateQuestions } = require('../services/aiTriageGateway');
+const { generateQuestions, generateSecondRoundQuestions } = require('../services/aiTriageGateway');
 const { recordHistorySummary, getRecentHistorySummary } = require('../services/patientHistoryService');
 const { assertCanStartTriage, deductForCompletedTriage } = require('../services/walletService');
 function toPublicSession(session) {
@@ -37,7 +37,7 @@ async function loadOwnedSessionOr404(sessionId, userId) {
     include: { triageResult: true },
   });
   if (!session || session.userId !== userId) {
-    // Same error for "not found" and "not yours" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â don't leak existence of
+    // Same error for "not found" and "not yours" ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â don't leak existence of
     // other users' sessions.
     throw new AppError('Session not found', 404, 'SESSION_NOT_FOUND');
   }
@@ -46,7 +46,7 @@ async function loadOwnedSessionOr404(sessionId, userId) {
 
 // POST /sessions
 // Implements: S1 initial_state --(create_session)--> S2 collecting_information.
-// S1 is never persisted (see sessionStateMachine.js) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the row is created
+// S1 is never persisted (see sessionStateMachine.js) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the row is created
 // directly in S2.
 async function createSession(req, res, next) {
   try {
@@ -76,7 +76,7 @@ async function createSession(req, res, next) {
   }
 }
 // POST /sessions/:id/generate-questions
-// Stays in S2_collecting_information ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â does not transition state, just
+// Stays in S2_collecting_information ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â does not transition state, just
 // returns AI-generated follow-up questions for the Frontend to ask before
 // calling submit-symptoms with the answers.
 async function generateSessionQuestions(req, res, next) {
@@ -226,7 +226,7 @@ async function submitSymptoms(req, res, next) {
     }
 
     // Decision (project manager, 2026-07-12): finalize_triage is Role:System
-    // in the diagram, so S6/S7/S8 go straight to S9 here ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â no separate
+    // in the diagram, so S6/S7/S8 go straight to S9 here ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â no separate
     // Frontend call. S5 (pending_doctor_review) is the one exception: it
     // stays open until a staff member reviews it (see staffFinalizeReview).
     const isAutoFinalized = AUTO_FINALIZE_STATES.has(resolvedState);
@@ -279,7 +279,7 @@ async function submitSymptoms(req, res, next) {
 // POST /sessions/:id/staff-finalize
 // Implements: S5 pending_doctor_review --(finalize_triage)--> S9 completed_triage.
 // Staff-only (see requireStaff middleware). Minimal Phase-1 stand-in for a
-// real doctor review panel (Phase 2, out of scope for this team) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â staff
+// real doctor review panel (Phase 2, out of scope for this team) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â staff
 // accounts are created manually via SQL for now (see README).
 // Not ownership-scoped: staff review sessions belonging to any patient.
 async function staffFinalizeReview(req, res, next) {
@@ -411,7 +411,7 @@ async function cancelSession(req, res, next) {
 }
 // POST /sessions/:id/feedback
 // Only allowed once triage is fully completed (S9). One feedback per
-// session ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â resubmission overwrites via upsert (project manager
+// session ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â resubmission overwrites via upsert (project manager
 // decision, 2026-07-15).
 async function submitFeedback(req, res, next) {
   const sessionId = req.params.id;
@@ -447,7 +447,117 @@ async function submitFeedback(req, res, next) {
     return next(err);
   }
 }
+
+// POST /sessions/:id/second-round-questions
+// Round 2 of the two-step questions flow (2026-07-24, AI team). Called
+// after the patient answered round-1's 5 questions. Either returns 5 more
+// questions (session stays in S2, same as generate-questions) or -- if the
+// AI escalates -- persists the final TriageResult and transitions state,
+// exactly mirroring submit-symptoms's finalize logic.
+async function secondRoundQuestions(req, res, next) {
+  const sessionId = req.params.id;
+  try {
+    const session = await loadOwnedSessionOr404(sessionId, req.user.id);
+
+    if (session.currentState !== 'S2_collecting_information') {
+      throw new AppError(
+        `Cannot request second-round questions from state ${session.currentState}`,
+        409,
+        'INVALID_STATE_TRANSITION',
+      );
+    }
+
+    const { presentingProblemId, patientDetails, round1QuestionsAsked, round1Responses } = req.body;
+
+    const patientRecord = await prisma.patientDetails.findUnique({
+      where: { userId: req.user.id },
+    });
+    if (!patientRecord) {
+      throw new AppError(
+        'No birth date on file for this user; cannot compute age',
+        422,
+        'PATIENT_DETAILS_MISSING',
+      );
+    }
+    const age = calculateAge(patientRecord.birthDate);
+    const patientHistory = await getRecentHistorySummary(req.user.id, 5);
+    const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
+
+    const result = await generateSecondRoundQuestions({
+      sessionId,
+      presentingProblemId,
+      age,
+      sex: patientDetails?.gender,
+      weightKg: patientDetails?.weightKg ?? patientDetails?.weight,
+      heightCm: patientDetails?.heightCm ?? patientDetails?.height,
+      round1QuestionsAsked,
+      round1Responses,
+      patientHistory,
+      medicalHistory: medicalHistoryRecord,
+    });
+
+    if (result.escalate === true) {
+      const { urgencyLevel, triageResultJson } = result;
+      const resolvedState = resolveStateForUrgency(urgencyLevel);
+      if (!resolvedState) {
+        throw new AppError(
+          `AI module returned an unrecognized urgencyLevel: ${urgencyLevel}`,
+          502,
+          'AI_RESPONSE_INVALID',
+        );
+      }
+
+      const isAutoFinalized = AUTO_FINALIZE_STATES.has(resolvedState);
+      const finalState = isAutoFinalized ? 'S9_completed_triage' : resolvedState;
+
+      const [, updatedSession] = await prisma.$transaction([
+        prisma.triageResult.create({
+          data: { sessionId, urgencyLevel, triageResultJson },
+        }),
+        prisma.session.update({
+          where: { id: sessionId },
+          data: { currentState: finalState, presentingProblemId },
+          include: { triageResult: true },
+        }),
+      ]);
+
+      recordAudit({
+        userId: req.user.id,
+        action: 'session_state_transition',
+        entityType: 'Session',
+        entityId: sessionId,
+        metadata: { from: 'S2_collecting_information', to: finalState, urgencyLevel, autoFinalized: isAutoFinalized, source: 'second_round' },
+      });
+
+      if (isAutoFinalized) {
+        try {
+          await deductForCompletedTriage(req.user.id);
+        } catch (walletErr) {
+          // Best-effort: never let wallet deduction break the main flow.
+        }
+        try {
+          await recordHistorySummary({
+            userId: req.user.id,
+            sessionId,
+            presentingProblemId,
+            urgencyLevel,
+            reasoningSummary: triageResultJson?.reasoning,
+          });
+        } catch (historyErr) {
+          // Best-effort: never let history-summary recording break the main flow.
+        }
+      }
+
+      return res.status(200).json({ escalate: true, session: toPublicSession(updatedSession) });
+    }
+
+    return res.status(200).json({ escalate: false, questions: result.questions });
+  } catch (err) {
+    return next(err);
+  }
+}
 module.exports = {
+  secondRoundQuestions,
   createSession,
   getSession,
   listSessions,
