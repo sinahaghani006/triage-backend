@@ -62,26 +62,44 @@ function validateAIResponse(rawText) {
 }
 
 /**
- * *** به‌روزرسانی — باگ کشف‌شده در production (همین گفتگو، تست واقعی). ***
- * الگوی قبلی (فقط حروف لاتین accented مثل ویتنامی) یک نمونه‌ی واقعی را
- * نگرفت: کاراکتر چینی «过去» (به معنی «قبلاً») وسط یک سؤال فارسی نشت
- * کرده بود و از فیلتر رد شده بود. این الگو حالا علاوه بر لاتین accented،
- * بازه‌های یونیکد CJK (چینی/ژاپنی/کره‌ای) را هم پوشش می‌دهد:
- *   - CJK Unified Ideographs (چینی رایج): \u4E00-\u9FFF
- *   - CJK Extension A (چینی کمیاب‌تر): \u3400-\u4DBF
- *   - هیراگانا (ژاپنی): \u3040-\u309F
- *   - کاتاکانا (ژاپنی): \u30A0-\u30FF
- *   - هانگول/کره‌ای: \uAC00-\uD7A3 و \u1100-\u11FF
- * این هنوز یک فیلتر heuristic است، نه پوشش کامل همه‌ی زبان‌های دنیا —
- * اگر بعداً نمونه‌ی نشت از زبان دیگری (مثلاً عربی با کاراکتر غیرمعمول،
- * یا سیریلیک) دیده شد، باید دوباره طبق همین الگو (با شواهد واقعی) گسترش
- * یابد.
+ * *** عقب‌گرد فوری — تصمیم اضطراری بر اساس شواهد واقعی production. ***
+ * افزودن بازه‌های یونیکد CJK (commit قبلی، cb52be1) باعث نرخ رد ۷۵٪ در
+ * تست‌های واقعی شد — با اینکه بررسی تئوریک هیچ همپوشانی مستقیمی بین
+ * بازه‌های CJK و بلاک یونیکد فارسی/عربی (۰۶۰۰-۰۶FF) یا علائم نگارشی
+ * رایج فارسی پیدا نکرد. چون علت دقیق (کدام کاراکتر واقعی باعث شده) بدون
+ * متن خام مدل قابل‌تشخیص نیست، و نرخ ۷۵٪ رد بسیار بدتر از ریسک اصلی
+ * (نشت نادر یک کلمه‌ی خارجی) است، بازه‌های CJK **موقتاً غیرفعال** شدند —
+ * الگو به حالت قبل (فقط لاتین accented، همان چیزی که با نرخ نرمال کار
+ * می‌کرد) برگشت.
+ *
+ * *** ⚠️ این تغییر قبلاً یک‌بار به‌صورت محلی انجام شده بود ولی هرگز
+ * commit/push/deploy نشده بود — این فایل همان فیکس را نهایی می‌کند. ***
+ *
+ * *** برای این‌که این‌بار بدون حدس تشخیص بدهیم: ***
+ * findForeignLanguageArtifactMatch اضافه شده تا وقتی (و اگر) دوباره
+ * چنین چیزی رخ داد، خود کاراکتر/کلمه‌ی محرک در پیام خطا (که در
+ * error_logs.message ذخیره می‌شود) قابل‌مشاهده باشد — نه فقط یک پیام
+ * عمومی. اگر می‌خواهید CJK دوباره فعال شود، این کار را فقط بعد از
+ * دیدن شواهد واقعی (کدام کاراکتر) در همین لاگ‌های جدید انجام دهید.
  */
-const FOREIGN_LANGUAGE_ARTIFACT_PATTERN =
-  /[À-ÿ\u1E00-\u1EFF\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7A3\u1100-\u11FF]/;
+const FOREIGN_LANGUAGE_ARTIFACT_PATTERN = /[À-ÿ\u1E00-\u1EFF]/;
 
 function containsForeignLanguageArtifact(text) {
   return typeof text === 'string' && FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(text);
+}
+
+/**
+ * پیدا کردن خودِ کاراکتر/کلمه‌ی محرک — فقط برای گنجاندن در پیام خطا،
+ * تا در error_logs.message قابل‌مشاهده باشد (چون error_logs متن خام
+ * کامل مدل را ذخیره نمی‌کند).
+ * @param {string} text
+ * @returns {string|null} کلمه‌ی حاوی کاراکتر مشکوک، یا null اگر چیزی نبود
+ */
+function findForeignLanguageArtifactMatch(text) {
+  if (typeof text !== 'string') return null;
+  const words = text.split(/\s+/);
+  const match = words.find((word) => FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word));
+  return match || null;
 }
 
 function stripForeignLanguageArtifacts(text) {
@@ -132,8 +150,12 @@ function validateQuestionsResponse(rawText) {
 
   for (const q of result.data.questions) {
     if (containsForeignLanguageArtifact(q.questionText) || q.options.some(containsForeignLanguageArtifact)) {
+      const matchedWord =
+        findForeignLanguageArtifactMatch(q.questionText) ||
+        q.options.map(findForeignLanguageArtifactMatch).find(Boolean) ||
+        '(نامشخص)';
       throw new ResponseValidationError(
-        'یکی از سؤالات حاوی کلمه‌ای از زبان غیرمنتظره است (احتمالاً artifact مدل) — برای جلوگیری از گیج‌کردن بیمار رد شد.',
+        `یکی از سؤالات حاوی کلمه‌ای از زبان غیرمنتظره است (احتمالاً artifact مدل) — برای جلوگیری از گیج‌کردن بیمار رد شد. کلمه‌ی محرک: "${matchedWord}"`,
         { code: 'LANGUAGE_ARTIFACT_DETECTED', rawText }
       );
     }
@@ -196,8 +218,12 @@ function validateSecondRoundResponse(rawText) {
 
   for (const q of result.data.questions) {
     if (containsForeignLanguageArtifact(q.questionText) || q.options.some(containsForeignLanguageArtifact)) {
+      const matchedWord =
+        findForeignLanguageArtifactMatch(q.questionText) ||
+        q.options.map(findForeignLanguageArtifactMatch).find(Boolean) ||
+        '(نامشخص)';
       throw new ResponseValidationError(
-        'یکی از سؤالات دور دوم حاوی کلمه‌ای از زبان غیرمنتظره است (احتمالاً artifact مدل) — برای جلوگیری از گیج‌کردن بیمار رد شد.',
+        `یکی از سؤالات دور دوم حاوی کلمه‌ای از زبان غیرمنتظره است (احتمالاً artifact مدل) — برای جلوگیری از گیج‌کردن بیمار رد شد. کلمه‌ی محرک: "${matchedWord}"`,
         { code: 'LANGUAGE_ARTIFACT_DETECTED', rawText }
       );
     }
@@ -213,6 +239,7 @@ module.exports = {
   validateQuestionsResponse,
   validateSecondRoundResponse,
   containsForeignLanguageArtifact,
+  findForeignLanguageArtifactMatch,
   stripForeignLanguageArtifacts,
   sanitizeRecommendations,
   isRecommendationSuspicious,
