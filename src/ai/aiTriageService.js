@@ -232,6 +232,16 @@ async function generateTriageQuestionsCore({
  * این حالت (مثلاً رد شدن از دور دوم) باید توسط مدیر پروژه مشخص شود؛
  * دقیقاً هم‌راستا با تصمیم مستندشده‌ی generateTriageQuestionsCore. ***
  *
+ * *** به‌روزرسانی (باگ کشف‌شده در production، همین گفتگو): تشخیص تکرار ***
+ * round1QuestionsAsked حالا هم به generateSecondRoundPrompt (برای
+ * دستورالعمل به مدل) هم به validateSecondRoundResponse (برای تشخیص
+ * کد-محورِ تکرار، نه فقط اتکا به قول مدل در پرامپت) پاس داده می‌شود.
+ * اگر AI با وجود دستورالعمل صریح باز هم سؤالی هم‌پوشان با دور اول
+ * برگرداند، validateSecondRoundResponse یک ResponseValidationError با
+ * کد ROUND2_QUESTION_DUPLICATE_DETECTED پرتاب می‌کند که توسط همین
+ * retry loop زیر مدیریت می‌شود — نیازی به تغییر منطق retry نبود، فقط
+ * منبع خطای جدید به همان مسیر موجود وصل شد.
+ *
  * @param {object} params
  * @param {string} params.sessionId
  * @param {string} params.presentingProblemId
@@ -280,7 +290,9 @@ async function generateSecondRoundCore({
     const providerResult = await callAIProvider(prompt, providerFn);
 
     try {
-      const validated = validateSecondRoundResponse(providerResult.rawText);
+      const validated = validateSecondRoundResponse(providerResult.rawText, {
+        round1QuestionTexts: round1QuestionsAsked,
+      });
 
       if (validated.escalate === true) {
         const triageResult = buildTriageResultFromAI({
