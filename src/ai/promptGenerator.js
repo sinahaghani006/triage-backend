@@ -6,7 +6,18 @@
  * «سیستم بر اساس پرونده بیمار پرامپت مناسب تولید می‌کند».
  *
  * قانون حیاتی رعایت‌شده: هیچ داده هویتی (نام، کد ملی، آدرس) در prompt قرار
- * نمی‌گیرد — فقط presentingProblemId، سن، جنس، وزن، و سوابق پرسش/پاسخ.
+ * نمی‌گیرد — فقط presentingProblemId، سن، جنس، وزن (در صورت وجود)، و
+ * سوابق پرسش/پاسخ.
+ *
+ * *** فیکس — تأییدشده با شواهد واقعی Backend (prisma schema): ***
+ * weightKg در دیتابیس واقعی nullable/اختیاری است (`weightKg Float? @map
+ * ("weight_kg")`) — یعنی کاربرانی که هنوز این مرحله را تکمیل نکرده‌اند
+ * می‌توانند بدون وزن ثبت‌شده به این نقطه برسند. قبل از این فیکس، این فایل
+ * weightKg را اجباری فرض کرده بود و با یک Error خام (نه AIConnectorError،
+ * نه ResponseValidationError) throw می‌کرد — که در Backend به یک ۵۰۰ خام
+ * و بدون راهنما منتهی می‌شد. حالا weightKg دقیقاً مثل heightCm اختیاری
+ * است: اگر عدد نبود، فقط از متن prompt حذف می‌شود، نه اینکه کل درخواست
+ * را crash کند.
  *
  * *** شکاف شناخته‌شده: بند ۷ (توصیه‌های عمومی مراقبتی) ***
  * این پرامپت طبق تصمیم فعلی، از AI درخواست «توصیه‌ی متن پزشکی» نمی‌کند،
@@ -151,14 +162,16 @@ const SYSTEM_INSTRUCTIONS = `
 اولیه‌ی فوریت بر اساس اطلاعات داده‌شده است، نه تشخیص یا تجویز درمان.
 
 *** نحوه‌ی استدلال — این بخش حیاتی است: ***
-سن، جنس، وزن، قد (در صورت وجود)، شکایت اصلی، و تمام سوابق پرسش‌وپاسخی
-که از بیمار گرفته شده را با هم در نظر بگیر، نه فقط عنوان شکایت اصلی
-به‌تنهایی. این مشخصات جمعیت‌شناختی را واقعاً در urgency_suggestion و
-reasoning‌ات دخالت بده، نه فقط دریافت کن — آستانه‌ی نگرانی برای یک
-علامت می‌تواند بسته به سن بیمار فرق کند (مثلاً همان علامت در یک بیمار
-سالمند معمولاً نیازمند توجه بیشتری است تا در یک بیمار جوان)؛ اگر وزن
-یا قد به‌نظرت روی ارزیابی شدت علائم تأثیر منطقی دارد (مثلاً در ارزیابی
-شدت کم‌آبی بدن)، از آن‌ها هم استفاده کن. اگر پاسخ‌ها نشانه‌ی علامت
+سن، جنس، وزن (در صورت وجود)، قد (در صورت وجود)، شکایت اصلی، و تمام سوابق
+پرسش‌وپاسخی که از بیمار گرفته شده را با هم در نظر بگیر، نه فقط عنوان
+شکایت اصلی به‌تنهایی. این مشخصات جمعیت‌شناختی را واقعاً در
+urgency_suggestion و reasoning‌ات دخالت بده، نه فقط دریافت کن —
+آستانه‌ی نگرانی برای یک علامت می‌تواند بسته به سن بیمار فرق کند
+(مثلاً همان علامت در یک بیمار سالمند معمولاً نیازمند توجه بیشتری است
+تا در یک بیمار جوان)؛ اگر وزن یا قد در اختیارت گذاشته شده و به‌نظرت
+روی ارزیابی شدت علائم تأثیر منطقی دارد (مثلاً در ارزیابی شدت کم‌آبی
+بدن)، از آن‌ها هم استفاده کن — اگر وزن یا قد داده نشده، طبیعی است،
+فقط بر اساس بقیه‌ی اطلاعات تصمیم بگیر. اگر پاسخ‌ها نشانه‌ی علامت
 هشدار یا شدت غیرمنتظره‌ای داشته باشند، حتی اگر شکایت اصلی در ظاهر ساده
 به‌نظر برسد (مثلاً «سردرد»)، باید همین موضوع در reasoning و
 urgency_suggestion تو منعکس شود. reasoning تو باید صریحاً نشان دهد که
@@ -252,11 +265,17 @@ urgency_suggestion تو منعکس شود. reasoning تو باید صریحاً 
 
 /**
  * تولید prompt نهایی برای ارسال به AI provider.
+ *
+ * *** فیکس weightKg (نگاه کن به یادداشت بالای فایل): ***
+ * weightKg دیگر اجباری نیست — دقیقاً مثل heightCm، اگر عدد نباشد فقط از
+ * متن prompt حذف می‌شود. اعتبارسنجی ورودی الزامی فقط شامل
+ * presentingProblemId، age، sex است.
+ *
  * @param {object} params
  * @param {string} params.presentingProblemId
  * @param {number} params.age
  * @param {'male'|'female'} params.sex
- * @param {number} params.weightKg
+ * @param {number} [params.weightKg] - اختیاری؛ اگر Backend ارسال نکند، از پرامپت حذف می‌شود
  * @param {number} [params.heightCm] - اختیاری؛ اگر Backend ارسال نکند، از پرامپت حذف می‌شود
  * @param {string[]} [params.questionsAsked]
  * @param {string[]} [params.patientResponses]
@@ -276,7 +295,7 @@ function generateTriagePrompt({
   medicalHistory,
 }) {
   if (!presentingProblemId || typeof age !== 'number' || !sex) {
-    throw new Error('generateTriagePrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
+    throw new Error('generateTriagePrompt: ورودی ناقص — presentingProblemId, age, sex الزامی هستند.');
   }
 
   const qaLines = questionsAsked
@@ -332,12 +351,13 @@ const QUESTIONS_SYSTEM_INSTRUCTIONS = `
 طراحی کن که دقیقاً همان علائم هشدار و ویژگی‌های تشخیصی‌افتراقی مرتبط با
 همان حوزه را بسنجند.
 
-*** سن و جنس و وزن بیمار را هم واقعاً در طراحی سؤالات لحاظ کن، نه فقط
-دریافت کن. *** آستانه‌ی نگرانی برای یک علامت می‌تواند بسته به سن بیمار
-فرق کند (مثلاً همان شکایت در یک بیمار سالمند معمولاً نیازمند توجه
-بیشتری به علائم هشدار است تا در یک بیمار جوان). اگر سن یا سایر
-مشخصات بیمار به‌نظرت روی انتخاب سؤالات تأثیر منطقی دارد، از آن استفاده
-کن.
+*** سن و جنس و وزن (در صورت وجود) بیمار را هم واقعاً در طراحی سؤالات
+لحاظ کن، نه فقط دریافت کن. *** آستانه‌ی نگرانی برای یک علامت می‌تواند
+بسته به سن بیمار فرق کند (مثلاً همان شکایت در یک بیمار سالمند معمولاً
+نیازمند توجه بیشتری به علائم هشدار است تا در یک بیمار جوان). اگر سن یا
+سایر مشخصات بیمار به‌نظرت روی انتخاب سؤالات تأثیر منطقی دارد، از آن
+استفاده کن؛ اگر وزن داده نشده، طبیعی است، فقط بر اساس بقیه‌ی اطلاعات
+سؤال طراحی کن.
 
 *** هرگز از یک الگوی ثابت (مثل «شدت + مدت + تب») برای همه‌ی شکایات
 استفاده نکن. *** برای هر شکایت، سؤالات باید از نظر بالینی به آن حوزه‌ی
@@ -398,19 +418,23 @@ const QUESTIONS_SYSTEM_INSTRUCTIONS = `
 
 /**
  * تولید prompt برای مرحله‌ی تولید سؤال (قبل از submit-symptoms نهایی).
+ *
+ * *** فیکس weightKg (نگاه کن به یادداشت بالای فایل): *** دیگر اجباری
+ * نیست — اگر عدد نباشد فقط از متن prompt حذف می‌شود.
+ *
  * @param {object} params
  * @param {string} params.presentingProblemId
  * @param {string} [params.initialDescription] - توضیح اولیه‌ی بیمار (مثل «روزی سه ساعت سردرد دارد»)
  * @param {number} params.age
  * @param {'male'|'female'} params.sex
- * @param {number} params.weightKg
+ * @param {number} [params.weightKg] - اختیاری؛ اگر Backend ارسال نکند، از پرامپت حذف می‌شود
  * @param {Array} [params.patientHistory] - خلاصه‌ی حداکثر ۵ مراجعه‌ی اخیر؛ نگاه کن به formatPatientHistory
  * @param {object} [params.medicalHistory] - { chronicConditions, allergies, currentMedications, surgicalHistory, familyHistory }؛ نگاه کن به formatMedicalHistory
  * @returns {{ system: string, user: string }}
  */
 function generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory = [], medicalHistory }) {
   if (!presentingProblemId || typeof age !== 'number' || !sex) {
-    throw new Error('generateQuestionsPrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
+    throw new Error('generateQuestionsPrompt: ورودی ناقص — presentingProblemId, age, sex الزامی هستند.');
   }
 
   const historyText = formatPatientHistory(patientHistory);
@@ -596,11 +620,15 @@ escalate:true اگر واقعاً یک علامت هشدار مشخص در پا�
 
 /**
  * تولید prompt برای مرحله‌ی دوم جریان پرسش دومرحله‌ای.
+ *
+ * *** فیکس weightKg (نگاه کن به یادداشت بالای فایل): *** دیگر اجباری
+ * نیست — اگر عدد نباشد فقط از متن prompt حذف می‌شود.
+ *
  * @param {object} params
  * @param {string} params.presentingProblemId
  * @param {number} params.age
  * @param {'male'|'female'} params.sex
- * @param {number} params.weightKg
+ * @param {number} [params.weightKg] - اختیاری؛ اگر Backend ارسال نکند، از پرامپت حذف می‌شود
  * @param {number} [params.heightCm]
  * @param {string[]} params.round1QuestionsAsked - دقیقاً ۵ سؤال دور اول
  * @param {string[]} params.round1Responses - دقیقاً ۵ پاسخ دور اول
@@ -620,7 +648,7 @@ function generateSecondRoundPrompt({
   medicalHistory,
 }) {
   if (!presentingProblemId || typeof age !== 'number' || !sex) {
-    throw new Error('generateSecondRoundPrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
+    throw new Error('generateSecondRoundPrompt: ورودی ناقص — presentingProblemId, age, sex الزامی هستند.');
   }
 
   const round1QaLines = round1QuestionsAsked

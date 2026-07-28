@@ -9,6 +9,12 @@
  * قبل از استفاده در تولید باید توسط مدیر پروژه بررسی و تأیید شود — به‌خصوص
  * لیست enum ها (presenting_problem_id ها، urgency levels) که باید با نسخه‌ی
  * نهایی presentingProblems.js هماهنگ شود.
+ *
+ * *** فیکس — تأییدشده با شواهد واقعی Backend (prisma schema): ***
+ * weightKg در دیتابیس واقعی nullable است (`weightKg Float? @map("weight_kg")`)
+ * — پس PatientContextSchema.weightKg هم باید اختیاری باشد، دقیقاً مثل
+ * heightCm. قبل از این فیکس، این فیلد بدون `.optional()` بود که با واقعیت
+ * دیتابیس در تضاد بود.
  */
 
 const { z } = require('zod');
@@ -19,11 +25,15 @@ const URGENCY_LEVELS = ['normal', 'home_care', 'doctor_review', 'emergency'];
 /**
  * PatientContextSchema — ورودی که به AI ارسال می‌شود.
  * قانون حیاتی پروژه: هیچ داده هویتی (نام، کد ملی، آدرس) نباید اینجا باشد.
- * فقط داده بالینی: شکایت، سن، جنس، وزن، قد.
+ * فقط داده بالینی: شکایت، سن، جنس، وزن (اختیاری)، قد (اختیاری).
  *
  * heightCm اختیاری است — طبق مشاهده‌ی migration جدید Backend
  * (add_height_cm) که هنوز رسماً به این ماژول اعلام نشده بود؛ برای
  * سازگاری با نسخه‌های قبلی Backend که این فیلد را ارسال نمی‌کنند.
+ *
+ * weightKg هم اختیاری است — تأییدشده با شواهد واقعی prisma schema
+ * (weightKg Float? @map("weight_kg"))؛ کاربرانی که هنوز مرحله‌ی ثبت
+ * جزئیات پزشکی را کامل نکرده‌اند ممکن است وزن ثبت‌شده نداشته باشند.
  */
 /**
  * MedicalHistorySchema — Task «اتصال Medical History»، تأیید مدیر پروژه
@@ -49,7 +59,7 @@ const PatientContextSchema = z.object({
   presentingProblemId: z.string().min(1),
   age: z.number().int().positive().max(130),
   sex: z.enum(['male', 'female']),
-  weightKg: z.number().positive().max(500),
+  weightKg: z.number().positive().max(500).optional(),
   heightCm: z.number().positive().max(300).optional(),
   questionsAsked: z.array(z.string()).default([]),
   patientResponses: z.array(z.string()).default([]),
