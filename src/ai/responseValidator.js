@@ -99,7 +99,19 @@ function validateAIResponse(rawText) {
  * می‌شود، همان ریسک تکرار نمی‌شود — فقط وقتی واقعاً بخش زیادی از متن خارجی
  * باشد (نادر) به رد/retry می‌رسیم.
  */
-const FOREIGN_LANGUAGE_ARTIFACT_PATTERN = /[À-ÿ\u1E00-\u1EFF\u0400-\u04FF\u4E00-\u9FFF]/;
+/**
+ * *** به‌روزرسانی دوم — تأیید صریح مدیر پروژه (همین گفتگو): ***
+ * شواهد Run 2 نشان داد یک کلمه‌ی انگلیسی ساده و بدون accent («contact»)
+ * هم نشت کرده بود — پترن قبلی فقط لاتین accented را می‌گرفت، نه حروف
+ * لاتین معمولی (a-z/A-Z). چون در هیچ‌کدام از ده‌ها سؤال بررسی‌شده تا
+ * الان (طبق تأیید مدیر پروژه) هیچ اختصار/واحد لاتین معتبری (mg, kg,
+ * COVID) داخل متن سؤال دیده نشده، اضافه‌کردن این بازه فعلاً ریسک
+ * false-positive جدیدی ندارد. *** اگر بعداً یک الگوی جدید false-positive
+ * دیده شد (مثلاً واحدهای اندازه‌گیری لاتین)، باید یک whitelist کوچک
+ * برایشان اضافه شود — این کار عمداً الان انجام نشده چون هنوز هیچ
+ * نمونه‌ی واقعی‌ای از این حالت دیده نشده. ***
+ */
+const FOREIGN_LANGUAGE_ARTIFACT_PATTERN = /[À-ÿ\u1E00-\u1EFF\u0400-\u04FFa-zA-Z\u4E00-\u9FFF]/;
 
 function containsForeignLanguageArtifact(text) {
   return typeof text === 'string' && FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(text);
@@ -209,6 +221,61 @@ function sanitizeRecommendations(recommendations) {
  * آستانه (ROUND2_DUPLICATE_SIMILARITY_THRESHOLD) قابل‌تنظیم بر اساس داده‌ی
  * واقعی آینده است.
  */
+/**
+ * *** به‌روزرسانی — تأیید مدیر پروژه بر اساس شواهد خام واقعی (این گفتگو): ***
+ * نسخه‌ی اول این تشخیص (فقط شباهت واژگانی خام/Jaccard) در عمل ۶ از ۶
+ * ران واقعی محور «تب» را نگرفت، چون واژگان دو طرف اکثراً هم‌معنی ولی
+ * متفاوت بودند («تب دارید» در برابر «دما یا لرز داشته‌اید»، «در تماس
+ * بوده‌اید» در برابر «ارتباط نزدیک داشته‌اید») — شباهت لغوی خام این
+ * هم‌معنایی را نمی‌بیند. فقط یک نمونه (محور «بلع»، ران ۶) تقریباً
+ * کلمه‌به‌کلمه بود که Jaccard خام هم می‌گرفتش.
+ *
+ * راه‌حل: یک نگاشت کوچک «مفهوم بالینی → کلمات هم‌معنی» اضافه شد
+ * (CLINICAL_CONCEPT_SYNONYMS)، بر اساس دقیقاً همان سه محوری که در داده‌ی
+ * واقعی تکرار شدند (تب، تماس با فرد بیمار، بلع) به‌علاوه‌ی چند محور
+ * رایج دیگر که در طراحی سؤالات این پروژه (نگاه کن به
+ * QUESTIONS_SYSTEM_INSTRUCTIONS در promptGenerator.js) به‌کرات ذکر شده
+ * (شدت، مدت، انتشار درد، عوامل تشدیدکننده). حالا تشخیص تکرار از دو
+ * سیگنال مستقل استفاده می‌کند: (الف) شباهت واژگانی خام (Jaccard) —
+ * برای بازنویسی‌های تقریباً کلمه‌به‌کلمه، (ب) اشتراک مفهوم بالینی —
+ * برای پارافریزهای هم‌معنی. اگر هرکدام مثبت باشد، تکرار تشخیص داده
+ * می‌شود.
+ *
+ * *** محدودیت شناخته‌شده: *** این نگاشت فقط محورهای دیده‌شده/رایج را
+ * پوشش می‌دهد، نه هر مفهوم بالینی ممکن برای هر ۱۰ شکایت پروژه — یک
+ * دیکشنری کامل نیست. اگر در داده‌های آینده محور تکراری جدیدی دیده شد
+ * که این نگاشت نمی‌گیرد، باید کلمات هم‌معنی‌اش به همین شیء اضافه شود؛
+ * نیازی به تغییر الگوریتم نیست، فقط داده.
+ */
+const CLINICAL_CONCEPT_SYNONYMS = {
+  fever: ['تب', 'دما', 'لرز', 'حرارت بدن', 'حرارت'],
+  contact_exposure: ['تماس', 'ارتباط نزدیک', 'فرد بیمار', 'بیماری عفونی', 'کسی که'],
+  swallowing: ['بلع', 'بلعیدن', 'قورت'],
+  duration_timing: ['چند روز', 'چند ساعت', 'مدت', 'از کی', 'چند وقت', 'ساعت گذشته', 'روز گذشته'],
+  severity: ['شدت', 'چقدر شدید', 'خفیف', 'متوسط بوده', 'شدید بوده'],
+  breathing: ['تنفس', 'نفس کشیدن', 'تنگی نفس'],
+  pain_radiation: ['انتشار', 'منتشر می‌شود', 'به بازو', 'به فک', 'به گردن'],
+  aggravating_factors: ['بدتر می‌شود', 'تشدید می‌شود', 'با فعالیت', 'با استراحت'],
+};
+
+function findMatchingConcepts(text) {
+  if (typeof text !== 'string') return new Set();
+  const concepts = new Set();
+  for (const [concept, synonyms] of Object.entries(CLINICAL_CONCEPT_SYNONYMS)) {
+    if (synonyms.some((phrase) => text.includes(phrase))) {
+      concepts.add(concept);
+    }
+  }
+  return concepts;
+}
+
+function hasSharedConcept(setA, setB) {
+  for (const c of setA) {
+    if (setB.has(c)) return true;
+  }
+  return false;
+}
+
 const PERSIAN_STOPWORDS = new Set([
   'و', 'در', 'به', 'از', 'که', 'این', 'آن', 'یا', 'برای', 'با', 'هم', 'را',
   'است', 'آیا', 'شما', 'دارید', 'دارد', 'چه', 'چند', 'کدام', 'بین', 'روی',
@@ -242,19 +309,24 @@ const ROUND2_DUPLICATE_SIMILARITY_THRESHOLD = 0.5;
 /**
  * @param {string[]} round1QuestionTexts
  * @param {Array<{questionText: string}>} round2Questions
- * @returns {number[]} ایندکس‌های (۰-پایه) سؤالات دور دوم که با یکی از سؤالات دور اول هم‌پوشانی بالا دارند
+ * @returns {number[]} ایندکس‌های (۰-پایه) سؤالات دور دوم که با یکی از سؤالات دور اول تکراری تشخیص داده شدند (لغوی یا مفهومی)
  */
 function findDuplicateRound2QuestionIndexes(round1QuestionTexts, round2Questions) {
   const round1WordSets = (round1QuestionTexts || []).map(extractSignificantWords);
+  const round1ConceptSets = (round1QuestionTexts || []).map(findMatchingConcepts);
   if (round1WordSets.length === 0) return [];
 
   const duplicateIndexes = [];
   round2Questions.forEach((q2, idx) => {
     const words2 = extractSignificantWords(q2.questionText);
-    const isDuplicate = round1WordSets.some(
+    const concepts2 = findMatchingConcepts(q2.questionText);
+
+    const isLexicalDuplicate = round1WordSets.some(
       (words1) => jaccardSimilarity(words1, words2) >= ROUND2_DUPLICATE_SIMILARITY_THRESHOLD
     );
-    if (isDuplicate) duplicateIndexes.push(idx);
+    const isConceptDuplicate = concepts2.size > 0 && round1ConceptSets.some((concepts1) => hasSharedConcept(concepts1, concepts2));
+
+    if (isLexicalDuplicate || isConceptDuplicate) duplicateIndexes.push(idx);
   });
   return duplicateIndexes;
 }
