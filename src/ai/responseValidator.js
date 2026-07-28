@@ -455,8 +455,18 @@ function validateSecondRoundResponse(rawText, { round1QuestionTexts = [] } = {})
     sanitizedQuestions.push(sanitized);
   }
 
+  // *** لاگ تشخیصی — تأیید مدیر پروژه، همین گفتگو (نگاه کن به aiTriageService.js). ***
+  if (round1QuestionTexts.length === 0) {
+    console.warn(
+      'validateSecondRoundResponse: round1QuestionTexts خالی است — چک تکرار دور دوم رد می‌شود (اجرا نمی‌شود).'
+    );
+  }
+
   if (round1QuestionTexts.length > 0) {
     const duplicateIndexes = findDuplicateRound2QuestionIndexes(round1QuestionTexts, sanitizedQuestions);
+    console.log(
+      `validateSecondRoundResponse: چک تکرار اجرا شد — ${duplicateIndexes.length} سؤال تکراری از ${sanitizedQuestions.length} یافت شد.`
+    );
     if (duplicateIndexes.length > 0) {
       throw new ResponseValidationError(
         `${duplicateIndexes.length} سؤال دور دوم (شماره‌ی ${duplicateIndexes.map((i) => i + 1).join('، ')}) با سؤالات دور اول هم‌پوشانی واژگانی بالا دارند — رد شد تا سؤال تکراری به بیمار نشان داده نشود.`,

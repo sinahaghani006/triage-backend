@@ -282,6 +282,17 @@ async function generateSecondRoundCore({
     medicalHistory,
   });
 
+  // *** لاگ تشخیصی — تأیید مدیر پروژه، همین گفتگو. ***
+  // هدف: پاسخ به سؤال Backend («آیا واقعاً چک تکرار صدا زده می‌شود؟») بدون
+  // حدس. اگر این لاگ round1QuestionsAsked.length=0 نشان دهد، یعنی Backend
+  // این پارامتر را هنگام صدا زدن generateSecondRoundQuestions پر نمی‌کند —
+  // و طبق طراحی فعلی responseValidator.js، در آن حالت کل چک تکرار بی‌صدا
+  // رد می‌شود (نه خطا، نه رفتار قابل‌مشاهده‌ی دیگر). این همان چیزی است که
+  // باید در error_logs/لاگ‌های Vercel این ران‌ها بررسی شود.
+  console.log(
+    `generateSecondRoundCore: round1QuestionsAsked.length=${round1QuestionsAsked.length} (اگر ۰ باشد، چک تکرار دور دوم بی‌صدا رد می‌شود)`
+  );
+
   const MAX_ATTEMPTS = 2; // ۱ تلاش اصلی + ۱ retry — فقط برای خطای اعتبارسنجی
   let lastValidationError;
 
