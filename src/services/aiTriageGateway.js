@@ -148,11 +148,13 @@ async function generateQuestions({ presentingProblemId, age, patientDetails = {}
     // 500 (errorHandler.js only recognizes AppError). Convert it to a
     // clean, actionable 422 the Frontend can show a retry button for.
     if (err instanceof ResponseValidationError) {
-      throw new AppError(
-        "ÃƒËœÃ‚Â³ÃƒËœÃ‚Â¤ÃƒËœÃ‚Â§Ãƒâ„¢Ã¢â‚¬Å¾ÃƒËœÃ‚Â§ÃƒËœÃ‚Âª ÃƒËœÃ‚ÂªÃƒâ„¢Ã‹â€ Ãƒâ„¢Ã¢â‚¬Å¾Ãƒâ€ºÃ…â€™ÃƒËœÃ‚Â¯ÃƒËœÃ‚Â´ÃƒËœÃ‚Â¯Ãƒâ„¢Ã¢â‚¬Â¡ ÃƒËœÃ‚ÂªÃƒâ„¢Ã‹â€ ÃƒËœÃ‚Â³ÃƒËœÃ‚Â· AI Ãƒâ„¢Ã¢â‚¬Â¦ÃƒËœÃ‚Â¹ÃƒËœÃ‚ÂªÃƒËœÃ‚Â¨ÃƒËœÃ‚Â± Ãƒâ„¢Ã¢â‚¬Â ÃƒËœÃ‚Â¨Ãƒâ„¢Ã‹â€ ÃƒËœÃ‚Â¯Ãƒâ„¢Ã¢â‚¬Â ÃƒËœÃ‚Â¯ ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Ãƒâ„¢Ã¢â‚¬Å¾ÃƒËœÃ‚Â·Ãƒâ„¢Ã‚ÂÃƒËœÃ‚Â§Ãƒâ„¢Ã¢â‚¬Â¹ ÃƒËœÃ‚Â¯Ãƒâ„¢Ã‹â€ ÃƒËœÃ‚Â¨ÃƒËœÃ‚Â§ÃƒËœÃ‚Â±Ãƒâ„¢Ã¢â‚¬Â¡ ÃƒËœÃ‚ÂªÃƒâ„¢Ã¢â‚¬Å¾ÃƒËœÃ‚Â§ÃƒËœÃ‚Â´ ÃƒÅ¡Ã‚Â©Ãƒâ„¢Ã¢â‚¬Â Ãƒâ€ºÃ…â€™ÃƒËœÃ‚Â¯.",
+      const appErr = new AppError(
+        "سؤالات تولیدشده توسط AI معتبر نبودند — لطفاً دوباره تلاش کنید.",
         422,
         err.code
       );
+      appErr.internalMessage = err.message;
+      throw appErr;
     }
     if (err instanceof AIConnectorError) {
       throw new AppError(
@@ -211,11 +213,13 @@ async function generateSecondRoundQuestions({
     });
   } catch (err) {
     if (err instanceof ResponseValidationError) {
-      throw new AppError(
+      const appErr = new AppError(
         "سؤالات تولیدشده توسط AI معتبر نبودند — لطفاً دوباره تلاش کنید.",
         422,
         err.code
       );
+      appErr.internalMessage = err.message;
+      throw appErr;
     }
     if (err instanceof AIConnectorError) {
       throw new AppError(

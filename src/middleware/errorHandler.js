@@ -2,7 +2,7 @@ const AppError = require('../utils/AppError');
 const { recordError } = require('../services/errorLogService');
 
 // Centralized error handler: guarantees every response has a JSON body
-// with a stable shape and a correct HTTP status code â€” no raw stack
+// with a stable shape and a correct HTTP status code -- no raw stack
 // traces leak to the client, and nothing crashes the process.
 // Every 5xx (unexpected errors, and AppErrors with a 5xx statusCode, e.g.
 // AI_SERVICE_UNAVAILABLE) is persisted to ErrorLogs; 4xx AppErrors (bad
@@ -14,6 +14,12 @@ const { recordError } = require('../services/errorLogService');
 // Logged regardless of status code so we can measure real occurrence
 // rate, unlike genuine client mistakes (bad input, wrong password, etc.)
 // which stay unlogged by design.
+//
+// 2026-07-27 fix: recordError() must be awaited here. On Vercel's
+// serverless runtime, the execution context can be frozen right after
+// res.json() sends the response, which was silently dropping every
+// fire-and-forget recordError() call before its DB write completed --
+// error_logs was missing entries for real production errors.
 const AI_DIAGNOSTIC_CODES = new Set([
   'QUESTIONS_COUNT_MISMATCH',
   'QUESTIONS_SCHEMA_MISMATCH',
@@ -23,12 +29,12 @@ const AI_DIAGNOSTIC_CODES = new Set([
   'AI_SERVICE_UNAVAILABLE',
 ]);
 
-function errorHandler(err, req, res, _next) {
+async function errorHandler(err, req, res, _next) {
   if (err instanceof AppError) {
     if (err.statusCode >= 500 || AI_DIAGNOSTIC_CODES.has(err.code)) {
-      recordError({
+      await recordError({
         code: err.code,
-        message: err.message,
+        message: err.internalMessage || err.message,
         stack: err.stack,
         path: req.originalUrl,
         method: req.method,
@@ -45,8 +51,8 @@ function errorHandler(err, req, res, _next) {
     });
   }
 
-  // Unexpected/programmer error â€” don't leak internals to the client.
-  recordError({
+  // Unexpected/programmer error -- don't leak internals to the client.
+  await recordError({
     message: err.message,
     stack: err.stack,
     path: req.originalUrl,
