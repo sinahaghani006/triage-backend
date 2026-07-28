@@ -94,17 +94,14 @@ async function generateSessionQuestions(req, res, next) {
 
     const { presentingProblemId, patientDetails } = req.body;
 
-    const patientRecord = await prisma.patientDetails.findUnique({
-      where: { userId: req.user.id },
-    });
-    if (!patientRecord) {
-      throw new AppError(
-        'No birth date on file for this user; cannot compute age',
-        422,
-        'PATIENT_DETAILS_MISSING',
-      );
+    // 2026-07-27 fix: Frontend never implemented the birthDate-based two-step
+    // registration (PATCH /users/me/patient-details is never called), so
+    // requiring a pre-existing PatientDetails row here broke every real user.
+    // Age is now sent fresh with each request instead, like gender/weight/height.
+    const age = Number(patientDetails?.age);
+    if (!Number.isFinite(age) || age <= 0) {
+      throw new AppError('Patient age is required (patientDetails.age)', 400, 'AGE_REQUIRED');
     }
-    const age = calculateAge(patientRecord.birthDate);
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
 
@@ -159,19 +156,13 @@ async function submitSymptoms(req, res, next) {
 
     const { presentingProblemId, patientDetails, answers } = req.body;
 
-    const patientRecord = await prisma.patientDetails.findUnique({
-      where: { userId: req.user.id },
-    });
-    if (!patientRecord) {
-      // Should not happen for users registered after birthDate became
-      // required, but fail clearly rather than silently sending age=undefined.
-      throw new AppError(
-        'No birth date on file for this user; cannot compute age for triage',
-        422,
-        'PATIENT_DETAILS_MISSING',
-      );
+    // 2026-07-27 fix: same as generate-questions -- age comes fresh from the
+    // request body now, not from a stored PatientDetails.birthDate that
+    // Frontend never actually creates.
+    const age = Number(patientDetails?.age);
+    if (!Number.isFinite(age) || age <= 0) {
+      throw new AppError('Patient age is required (patientDetails.age)', 400, 'AGE_REQUIRED');
     }
-    const age = calculateAge(patientRecord.birthDate);
 
     const submittedWeight = patientDetails?.weightKg ?? patientDetails?.weight;
     const submittedHeight = patientDetails?.heightCm ?? patientDetails?.height;
@@ -187,9 +178,19 @@ async function submitSymptoms(req, res, next) {
       patientUpdateData.gender = submittedGender;
     }
     if (Object.keys(patientUpdateData).length > 0) {
-      await prisma.patientDetails.update({
+      // 2026-07-27 fix: upsert instead of update -- no PatientDetails row is
+      // ever pre-created (see age fix above), so a plain update() threw an
+      // uncaught Prisma "record not found" error for every real user here.
+      // birthDate is still NOT NULL in the schema without a migration, so we
+      // synthesize an approximate one from the age just received, purely to
+      // satisfy the column -- age calculations never read it back.
+      // TODO: proper migration to make birthDate nullable (or add a real
+      // age column) and drop this synthetic value.
+      const approxBirthDate = new Date(new Date().getFullYear() - age, 0, 1);
+      await prisma.patientDetails.upsert({
         where: { userId: req.user.id },
-        data: patientUpdateData,
+        create: { userId: req.user.id, birthDate: approxBirthDate, ...patientUpdateData },
+        update: patientUpdateData,
       });
     }
 
@@ -469,17 +470,12 @@ async function secondRoundQuestions(req, res, next) {
 
     const { presentingProblemId, patientDetails, round1QuestionsAsked, round1Responses } = req.body;
 
-    const patientRecord = await prisma.patientDetails.findUnique({
-      where: { userId: req.user.id },
-    });
-    if (!patientRecord) {
-      throw new AppError(
-        'No birth date on file for this user; cannot compute age',
-        422,
-        'PATIENT_DETAILS_MISSING',
-      );
+    // 2026-07-27 fix: same as generate-questions -- age comes fresh from the
+    // request body now, not from a stored PatientDetails.birthDate.
+    const age = Number(patientDetails?.age);
+    if (!Number.isFinite(age) || age <= 0) {
+      throw new AppError('Patient age is required (patientDetails.age)', 400, 'AGE_REQUIRED');
     }
-    const age = calculateAge(patientRecord.birthDate);
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
 
