@@ -1,6 +1,22 @@
 const prisma = require('../config/prismaClient');
 const { getRecentHistorySummary } = require('../services/patientHistoryService');
 
+// 2026-07-28: age is stored as an approximate birthDate (derived from the
+// age the user submitted -- see sessionsController.js upsert fix) purely
+// to satisfy the NOT NULL column; this recomputes a year-accurate age back
+// from it for Frontend's "returning user, skip the form" flow.
+function calculateAgeFromBirthDate(birthDate) {
+  if (!birthDate) return null;
+  const today = new Date();
+  const bd = new Date(birthDate);
+  let age = today.getFullYear() - bd.getFullYear();
+  const hadBirthdayThisYear =
+    today.getMonth() > bd.getMonth() ||
+    (today.getMonth() === bd.getMonth() && today.getDate() >= bd.getDate());
+  if (!hadBirthdayThisYear) age -= 1;
+  return age;
+}
+
 async function getHistorySummary(req, res, next) {
   try {
     const limit = Number(req.query.limit) || 5;
@@ -12,6 +28,7 @@ async function getHistorySummary(req, res, next) {
 
     return res.status(200).json({
       history,
+      lastAge: patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null,
       lastWeightKg: patientRecord?.weightKg ?? null,
       lastHeightCm: patientRecord?.heightCm ?? null,
       lastGender: patientRecord?.gender ?? null,
