@@ -1,4 +1,4 @@
-﻿const { body } = require('express-validator');
+const { body } = require('express-validator');
 
 const registerValidator = [
   body('name')
@@ -39,4 +39,12 @@ const patientDetailsValidator = [
   body('gender').optional().isString(),
 ];
 
-module.exports = { registerValidator, loginValidator, patientDetailsValidator };
+const changePasswordValidator = [
+  body('currentPassword')
+    .notEmpty().withMessage('currentPassword is required'),
+  body('newPassword')
+    .notEmpty().withMessage('newPassword is required')
+    .isLength({ min: 8 }).withMessage('newPassword must be at least 8 characters'),
+];
+
+module.exports = { registerValidator, loginValidator, patientDetailsValidator, changePasswordValidator };

@@ -1,5 +1,10 @@
+const bcrypt = require('bcrypt');
 const prisma = require('../config/prismaClient');
+const AppError = require('../utils/AppError');
+const { recordAudit } = require('../services/auditLogService');
 const { getRecentHistorySummary } = require('../services/patientHistoryService');
+
+const SALT_ROUNDS = 12;
 
 // 2026-07-28: age is stored as an approximate birthDate (derived from the
 // age the user submitted -- see sessionsController.js upsert fix) purely
@@ -148,6 +153,37 @@ async function getWalletInfo(req, res, next) {
     return next(err);
   }
 }
+// PATCH /users/me/password
+async function changePassword(req, res, next) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const passwordMatches = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!passwordMatches) {
+      recordAudit({
+        userId: user.id,
+        action: 'password_change_failed',
+        entityType: 'User',
+        entityId: user.id,
+        metadata: { reason: 'wrong_current_password' },
+      });
+      throw new AppError('Current password is incorrect', 401, 'INVALID_CREDENTIALS');
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    recordAudit({ userId: user.id, action: 'password_changed', entityType: 'User', entityId: user.id });
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   getWalletInfo,
   upsertPatientDetails,
@@ -156,4 +192,5 @@ module.exports = {
   updateMedicalHistory,
   createVital,
   listVitals,
+  changePassword,
 };

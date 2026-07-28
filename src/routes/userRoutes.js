@@ -4,7 +4,7 @@ const userController = require('../controllers/userController');
 const validateRequest = require('../middleware/validateRequest');
 const { updateMedicalHistoryValidator } = require('../middleware/validators/medicalHistoryValidators');
 const { createVitalValidator } = require('../middleware/validators/vitalsValidators');
-const { patientDetailsValidator } = require('../middleware/validators/authValidators');
+const { patientDetailsValidator, changePasswordValidator } = require('../middleware/validators/authValidators');
 
 const router = express.Router();
 router.use(authenticate);
@@ -15,5 +15,6 @@ router.post('/me/vitals', createVitalValidator, validateRequest, userController.
 router.get('/me/vitals', userController.listVitals);
 router.patch('/me/patient-details', patientDetailsValidator, validateRequest, userController.upsertPatientDetails);
 router.get('/me/wallet', userController.getWalletInfo);
+router.patch('/me/password', changePasswordValidator, validateRequest, userController.changePassword);
 
 module.exports = router;
