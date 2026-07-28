@@ -275,7 +275,7 @@ function generateTriagePrompt({
   patientHistory = [],
   medicalHistory,
 }) {
-  if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
+  if (!presentingProblemId || typeof age !== 'number' || !sex) {
     throw new Error('generateTriagePrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
   }
 
@@ -290,7 +290,7 @@ function generateTriagePrompt({
 شکایت اصلی (presenting_problem_id): ${presentingProblemId}
 سن: ${age}
 جنس: ${sex === 'male' ? 'مرد' : 'زن'}
-وزن: ${weightKg} کیلوگرم
+${typeof weightKg === 'number' ? `وزن: ${weightKg} کیلوگرم` : ''}
 ${typeof heightCm === 'number' ? `قد: ${heightCm} سانتی‌متر` : ''}
 
 ${qaLines ? `سوابق پرسش و پاسخ (این پاسخ‌ها را در تصمیم نهایی واقعاً لحاظ کن، نه صرفاً بازگو):\n${qaLines}` : 'هنوز هیچ سؤال و پاسخی ثبت نشده است.'}
@@ -409,7 +409,7 @@ const QUESTIONS_SYSTEM_INSTRUCTIONS = `
  * @returns {{ system: string, user: string }}
  */
 function generateQuestionsPrompt({ presentingProblemId, initialDescription, age, sex, weightKg, patientHistory = [], medicalHistory }) {
-  if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
+  if (!presentingProblemId || typeof age !== 'number' || !sex) {
     throw new Error('generateQuestionsPrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
   }
 
@@ -420,7 +420,7 @@ function generateQuestionsPrompt({ presentingProblemId, initialDescription, age,
 شکایت اصلی (presenting_problem_id): ${presentingProblemId}
 سن: ${age}
 جنس: ${sex === 'male' ? 'مرد' : 'زن'}
-وزن: ${weightKg} کیلوگرم
+${typeof weightKg === 'number' ? `وزن: ${weightKg} کیلوگرم` : ''}
 توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}
 
 ${historyText}
@@ -619,7 +619,7 @@ function generateSecondRoundPrompt({
   patientHistory = [],
   medicalHistory,
 }) {
-  if (!presentingProblemId || typeof age !== 'number' || !sex || typeof weightKg !== 'number') {
+  if (!presentingProblemId || typeof age !== 'number' || !sex) {
     throw new Error('generateSecondRoundPrompt: ورودی ناقص — presentingProblemId, age, sex, weightKg الزامی هستند.');
   }
 
@@ -634,7 +634,7 @@ function generateSecondRoundPrompt({
 شکایت اصلی (presenting_problem_id): ${presentingProblemId}
 سن: ${age}
 جنس: ${sex === 'male' ? 'مرد' : 'زن'}
-وزن: ${weightKg} کیلوگرم
+${typeof weightKg === 'number' ? `وزن: ${weightKg} کیلوگرم` : ''}
 ${typeof heightCm === 'number' ? `قد: ${heightCm} سانتی‌متر` : ''}
 
 سؤالات و پاسخ‌های دور اول (این ۵ سؤال دیگر تکرار نشوند؛ پاسخ‌ها را واقعاً برای تصمیم بین escalate یا ادامه لحاظ کن):
