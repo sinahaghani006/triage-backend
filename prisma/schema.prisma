@@ -202,10 +202,13 @@ model PeriodicVitals {
   @@index([userId, type])
 }
 
-// Wallet (2026-07-21): balance in Toman. Default 100000, each completed
-// triage deducts 10000 (both figures are placeholders pending the revenue
-// planning session). Daily limit of 5 triages is enforced separately by
-// counting today's PatientHistorySummary rows -- no counter field needed.
+// Wallet (2026-07-21, updated 2026-07-29 with actual current values from
+// production -- confirmed via GET /users/me/wallet, source of truth is
+// walletService.js not this comment): balance in Toman, default 1,000,000.
+// Each completed triage deducts 5,000. Daily limit is 20 triages, enforced
+// separately by counting today's PatientHistorySummary rows -- no counter
+// field needed. These are still not confirmed as final by the revenue
+// planning session -- update this comment again if/when they change.
 model Wallet {
   id        String   @id @default(uuid())
   userId    String   @unique @map("user_id")
