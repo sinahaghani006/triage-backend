@@ -696,6 +696,24 @@ ${medicalHistoryText}
 بر اساس این اطلاعات، طبق فرمت خواسته‌شده در دستورالعمل سیستم، یکی از دو حالت escalate:false (با ۵ سؤال جدید) یا escalate:true (با تصمیم نهایی) را پاسخ بده.
 `.trim();
 
+  // *** لاگ تشخیصی — تأیید مدیرعامل/مدیر پروژه (همین گفتگو، تحقیق مجدد). ***
+  // هدف ۱: نشان‌دادن payload واقعی که به AI فرستاده می‌شود (خواسته‌ی صریح
+  // مدیرعامل)، بدون نیاز به دسترسی مستقیم من به DB.
+  // هدف ۲: تأیید اینکه round1Responses واقعاً پاسخ‌های واقعی بیمار است،
+  // نه آرایه‌ی خالی/جای‌خالی — چون اگر خالی باشد، هر ۵ سطر بالا
+  // «(پاسخ داده نشده)» می‌شود و مدل عملاً هیچ پاسخ مشخصی برای عمیق‌شدن
+  // ندارد؛ این می‌تواند دقیقاً همان علت سؤالات کلی/تکراری‌نما در دور دوم
+  // باشد که مدیرعامل گزارش کرده، جدا از (یا علاوه بر) مسئله‌ی تکرار.
+  // هدف ۳: یک برچسف نسخه (BUILD TAG) که مستقیماً تأیید می‌کند این نسخه‌ی
+  // کد (نه نسخه‌ی قدیمی‌تر cache‌شده) واقعاً روی Vercel اجرا می‌شود —
+  // بدون نیاز به چک دستی commit hash در پنل.
+  console.log('[BUILD_TAG round2-diagnostic-2026-07-30-A] generateSecondRoundPrompt در حال اجراست.');
+  console.log(
+    `generateSecondRoundPrompt: round1Responses.length=${round1Responses.length} | مقادیر: ${JSON.stringify(round1Responses)}`
+  );
+  console.log('generateSecondRoundPrompt: متن کامل بخش سؤال‌وپاسخ دور اول که به AI فرستاده می‌شود:\n' + round1QaLines);
+  console.log('generateSecondRoundPrompt: متن کامل prompt.user که به AI فرستاده می‌شود:\n' + userContent);
+
   return {
     system: SECOND_ROUND_SYSTEM_INSTRUCTIONS,
     user: userContent,
