@@ -87,16 +87,56 @@ function formatPatientHistory(patientHistory) {
 
   const introLine = `لازم به توضیح است بیمار در دوره‌ی اخیر ${toPersianDigits(capped.length)} بار مراجعه داشته است:`;
 
-  const lines = capped.map((entry, i) => {
-    const relativeDate = computeRelativeDateFa(entry?.createdAt);
-    const problemId = typeof entry?.presentingProblemId === 'string' ? entry.presentingProblemId : 'نامشخص';
-    const problemLabel = findPresentingProblemById(problemId)?.labelFa || problemId;
-    const urgencyLevel = typeof entry?.urgencyLevel === 'string' ? entry.urgencyLevel : '';
-    const urgencyPart = urgencyLevel ? ` (نتیجه: ${urgencyLevel})` : '';
-    return `${toPersianDigits(i + 1)}. [${relativeDate}] ${problemLabel}${urgencyPart}`;
-  });
-
   return `${introLine}\n${lines.join('\n')}`;
+}
+
+/**
+ * *** قابلیت جدید — بازنویسی روایی ابتدای prompt، به دستور مستقیم مدیرعامل
+ * (سینا)، تأیید مدیر پروژه در همین گفتگو. ***
+ *
+ * قبلاً ابتدای prompt به‌شکل برچسب‌های جدا بود («شکایت اصلی: X»، «سن: Y»،
+ * «جنس: Z»). مدیرعامل خواسته این‌ها در یک جمله‌ی طبیعی و روایی ترکیب شوند:
+ * «بیمار با سن X و وزن Y مشکل Z را دارد و قبلاً هم ... مراجعه داشته...».
+ *
+ * *** دامنه‌ی تاریخچه‌ی مراجعات قبلی — تأیید صریح مدیر پروژه (همین گفتگو): ***
+ * فقط «شکایت + نتیجه‌ی هر مراجعه» در این جمله گنجانده می‌شود، نه متن
+ * سؤالات آن مراجعات — چون endpoint فعلی سابقه (`GET
+ * /users/me/history-summary`) اصلاً متن سؤالات را برنمی‌گرداند (تصمیم
+ * قبلی، برای محدودکردن حجم prompt و ریسک حریم خصوصی) و مدیر پروژه تأیید
+ * کرد همین سطح فعلی کافی است — نیازی به تغییر Backend/endpoint نبود.
+ *
+ * @param {object} params
+ * @param {number} params.age
+ * @param {'male'|'female'} params.sex
+ * @param {number} [params.weightKg]
+ * @param {number} [params.heightCm]
+ * @param {string} params.presentingProblemId
+ * @param {Array} [params.patientHistory]
+ * @returns {string} یک جمله‌ی روایی کامل (با نقطه در انتها)
+ */
+function buildPatientNarrativeIntro({ age, sex, weightKg, heightCm, presentingProblemId, patientHistory = [] }) {
+  const problemLabel = findPresentingProblemById(presentingProblemId)?.labelFa || presentingProblemId;
+  const sexFa = sex === 'male' ? 'مرد' : 'زن';
+  const weightPhrase = typeof weightKg === 'number' ? `، وزن ${weightKg} کیلوگرم` : '';
+  const heightPhrase = typeof heightCm === 'number' ? `، قد ${heightCm} سانتی‌متر` : '';
+
+  let historyPhrase = '';
+  if (Array.isArray(patientHistory) && patientHistory.length > 0) {
+    const capped = patientHistory.slice(0, 5);
+    const items = capped.map((entry) => {
+      const relativeDate = computeRelativeDateFa(entry?.createdAt);
+      const historyProblemId = typeof entry?.presentingProblemId === 'string' ? entry.presentingProblemId : null;
+      const historyLabel = historyProblemId
+        ? findPresentingProblemById(historyProblemId)?.labelFa || historyProblemId
+        : 'نامشخص';
+      const urgencyLevel = typeof entry?.urgencyLevel === 'string' ? entry.urgencyLevel : null;
+      const urgencyPhrase = urgencyLevel ? ` (نتیجه: ${urgencyLevel})` : '';
+      return `${relativeDate} با شکایت «${historyLabel}»${urgencyPhrase}`;
+    });
+    historyPhrase = ` و پیش از این هم ${toPersianDigits(capped.length)} بار مراجعه داشته است: ${items.join('؛ ')}`;
+  }
+
+  return `بیمار با سن ${age} سال، جنس ${sexFa}${weightPhrase}${heightPhrase}، مشکل «${problemLabel}» را دارد${historyPhrase}.`;
 }
 
 /**
@@ -323,19 +363,13 @@ function generateTriagePrompt({
     .map((q, i) => `س${i + 1}: ${q}\nج${i + 1}: ${patientResponses[i] ?? '(پاسخ داده نشده)'}`)
     .join('\n');
 
-  const historyText = formatPatientHistory(patientHistory);
+  const narrativeIntro = buildPatientNarrativeIntro({ age, sex, weightKg, heightCm, presentingProblemId, patientHistory });
   const medicalHistoryText = formatMedicalHistory(medicalHistory);
 
   const userContent = `
-شکایت اصلی (presenting_problem_id): ${presentingProblemId}
-سن: ${age}
-جنس: ${sex === 'male' ? 'مرد' : 'زن'}
-${typeof weightKg === 'number' ? `وزن: ${weightKg} کیلوگرم` : ''}
-${typeof heightCm === 'number' ? `قد: ${heightCm} سانتی‌متر` : ''}
+${narrativeIntro}
 
 ${qaLines ? `سوابق پرسش و پاسخ (این پاسخ‌ها را در تصمیم نهایی واقعاً لحاظ کن، نه صرفاً بازگو):\n${qaLines}` : 'هنوز هیچ سؤال و پاسخی ثبت نشده است.'}
-
-${historyText}
 
 ${medicalHistoryText}
 
@@ -458,17 +492,12 @@ function generateQuestionsPrompt({ presentingProblemId, initialDescription, age,
     throw new Error('generateQuestionsPrompt: ورودی ناقص — presentingProblemId, age, sex الزامی هستند.');
   }
 
-  const historyText = formatPatientHistory(patientHistory);
+  const narrativeIntro = buildPatientNarrativeIntro({ age, sex, weightKg, presentingProblemId, patientHistory });
   const medicalHistoryText = formatMedicalHistory(medicalHistory);
 
   const userContent = `
-شکایت اصلی (presenting_problem_id): ${presentingProblemId}
-سن: ${age}
-جنس: ${sex === 'male' ? 'مرد' : 'زن'}
-${typeof weightKg === 'number' ? `وزن: ${weightKg} کیلوگرم` : ''}
+${narrativeIntro}
 توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}
-
-${historyText}
 
 ${medicalHistoryText}
 
@@ -676,20 +705,14 @@ function generateSecondRoundPrompt({
     .map((q, i) => `س${i + 1}: ${q}\nج${i + 1}: ${round1Responses[i] ?? '(پاسخ داده نشده)'}`)
     .join('\n');
 
-  const historyText = formatPatientHistory(patientHistory);
+  const narrativeIntro = buildPatientNarrativeIntro({ age, sex, weightKg, heightCm, presentingProblemId, patientHistory });
   const medicalHistoryText = formatMedicalHistory(medicalHistory);
 
   const userContent = `
-شکایت اصلی (presenting_problem_id): ${presentingProblemId}
-سن: ${age}
-جنس: ${sex === 'male' ? 'مرد' : 'زن'}
-${typeof weightKg === 'number' ? `وزن: ${weightKg} کیلوگرم` : ''}
-${typeof heightCm === 'number' ? `قد: ${heightCm} سانتی‌متر` : ''}
+${narrativeIntro}
 
 سؤالات و پاسخ‌های دور اول (این ۵ سؤال دیگر تکرار نشوند؛ پاسخ‌ها را واقعاً برای تصمیم بین escalate یا ادامه لحاظ کن):
 ${round1QaLines}
-
-${historyText}
 
 ${medicalHistoryText}
 
