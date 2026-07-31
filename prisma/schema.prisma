@@ -57,8 +57,60 @@ model User {
   medicalHistory    MedicalHistory?
   periodicVitals    PeriodicVitals[]
   wallet            Wallet?
+  orders            Order[]
+  referralCode      ReferralCode?
+  wasInvitedBy      ReferralRedemption? @relation("InvitedUser")
 
   @@map("users")
+}
+
+// Payment/plans (2026-08-01, PM-approved data model). Sandbox Zarinpal
+// integration comes next; this model is provider-agnostic on purpose so
+// swapping in the real merchant code later needs no schema change.
+model Order {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  type              String    // "plan_purchase" | "topup"
+  planCode          String?   @map("plan_code") // "SILVER" | "GOLD" | "DIAMOND" | null for topup
+  amountToman       Int       @map("amount_toman")
+  status            String    @default("pending") // "pending" | "paid" | "failed" | "cancelled"
+  zarinpalAuthority String?   @unique @map("zarinpal_authority")
+  zarinpalRefId     String?   @map("zarinpal_ref_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  paidAt            DateTime? @map("paid_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("orders")
+  @@index([userId])
+}
+
+model ReferralCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  code      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redemptions ReferralRedemption[]
+
+  @@map("referral_codes")
+}
+
+// Only credited (creditedAt set) once the invited user completes one real
+// triage -- not on signup alone -- per anti-abuse decision (2026-08-01).
+model ReferralRedemption {
+  id             String    @id @default(uuid())
+  referralCodeId String    @map("referral_code_id")
+  invitedUserId  String    @unique @map("invited_user_id")
+  creditedAt     DateTime? @map("credited_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  referralCode ReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Cascade)
+  invitedUser  User         @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@map("referral_redemptions")
+  @@index([referralCodeId])
 }
 
 // Static demographic data about the patient. birthDate is the source of
