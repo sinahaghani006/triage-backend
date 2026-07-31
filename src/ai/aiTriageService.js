@@ -185,7 +185,14 @@ async function generateTriageQuestionsCore({
     medicalHistory,
   });
 
-  const MAX_ATTEMPTS = 2; // ۱ تلاش اصلی + ۱ retry — فقط برای خطای اعتبارسنجی
+  // *** به‌روزرسانی — تأیید مدیر پروژه بر اساس شواهد واقعی (این گفتگو): ***
+  // بودجه از ۲ به ۳ افزایش یافت (۱ تلاش اصلی + ۲ retry) چون شواهد واقعی
+  // production نشان داد ۲ تلاش گاهی برای عبور از یک شکست اعتبارسنجی کافی
+  // نیست. توجه: برخلاف generateSecondRoundCore، اینجا در صورت اتمام همه‌ی
+  // تلاش‌ها همچنان throw می‌شود (نه fallback به doctor_review) — چون شکل
+  // خروجی این تابع ({questions}) معادل TriageResult نیست و تبدیل آن به
+  // escalate:true یک تغییر شکل API است که Backend باید صریحاً تأیید کند.
+  const MAX_ATTEMPTS = 3;
   let lastValidationError;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -293,7 +300,9 @@ async function generateSecondRoundCore({
     `generateSecondRoundCore: round1QuestionsAsked.length=${round1QuestionsAsked.length} (اگر ۰ باشد، چک تکرار دور دوم بی‌صدا رد می‌شود)`
   );
 
-  const MAX_ATTEMPTS = 2; // ۱ تلاش اصلی + ۱ retry — فقط برای خطای اعتبارسنجی
+  // *** به‌روزرسانی — تأیید مدیر پروژه بر اساس شواهد واقعی (این گفتگو): ***
+  // بودجه از ۲ به ۳ افزایش یافت (۱ تلاش اصلی + ۲ retry).
+  const MAX_ATTEMPTS = 3;
   let lastValidationError;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -343,7 +352,41 @@ async function generateSecondRoundCore({
     }
   }
 
-  throw lastValidationError;
+  // *** به‌روزرسانی — تأیید مدیر پروژه بر اساس شواهد واقعی (این گفتگو): ***
+  // قبلاً اینجا لغزش خطای اعتبارسنجی نهایی throw می‌شد — یعنی یک کاربر
+  // واقعی وسط جریان دور دوم با یک خطای خام (۴۲۲/۵۰۰) گیر می‌کرد، بدون
+  // هیچ تصمیم قابل‌نمایش. این با قانون طلایی خودِ پروژه («هر خطای
+  // AI/validation => doctor_review، هرگز dead-end») ناهماهنگ بود — آن
+  // قانون قبلاً فقط در runAiTriageAnalysisCore پیاده‌سازی شده بود، نه اینجا.
+  // حالا به‌جای throw، دقیقاً همان الگو اعمال می‌شود: یک نتیجه‌ی
+  // doctor_review خودکار ساخته و به شکل escalate:true (که Backend/Frontend
+  // از قبل برای حالت escalate واقعی AI پشتیبانی می‌کنند، پس تغییر شکل API
+  // لازم نیست) برگردانده می‌شود.
+  console.warn(
+    `generateSecondRoundCore: همه‌ی ${MAX_ATTEMPTS} تلاش با خطای اعتبارسنجی شکست خوردند (${lastValidationError?.code}) — طبق قانون escalate-only، fallback به doctor_review.`
+  );
+
+  const fallbackTriageResult = buildFallbackTriageResult({
+    sessionId,
+    presentingProblemId,
+    questionsAsked: round1QuestionsAsked,
+    patientResponses: round1Responses,
+    failureReason: `دور دوم بعد از ${MAX_ATTEMPTS} تلاش با خطای اعتبارسنجی شکست خورد: ${lastValidationError?.message}`,
+  });
+
+  const fallbackValidated = TriageResultSchema.safeParse(fallbackTriageResult);
+  if (!fallbackValidated.success) {
+    // اگر حتی fallback هم schema را نقض کند، این یک باگ داخلی جدی است —
+    // نباید بی‌صدا رد شود؛ اینجا throw کردن اصل خطای اعتبارسنجی قبلی
+    // امن‌تر از بلعیدن یک باگ ناشناخته است.
+    throw lastValidationError;
+  }
+
+  return {
+    escalate: true,
+    urgencyLevel: fallbackValidated.data.urgency_level,
+    triageResultJson: fallbackValidated.data,
+  };
 }
 
 module.exports = {
