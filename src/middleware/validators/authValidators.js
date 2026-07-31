@@ -47,4 +47,11 @@ const changePasswordValidator = [
     .isLength({ min: 8 }).withMessage('newPassword must be at least 8 characters'),
 ];
 
-module.exports = { registerValidator, loginValidator, patientDetailsValidator, changePasswordValidator };
+const changeNameValidator = [
+  body('name')
+    .trim()
+    .notEmpty().withMessage('name is required')
+    .isLength({ max: 120 }).withMessage('name must be at most 120 characters'),
+];
+
+module.exports = { registerValidator, loginValidator, patientDetailsValidator, changePasswordValidator, changeNameValidator };

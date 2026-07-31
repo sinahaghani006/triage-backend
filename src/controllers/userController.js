@@ -195,6 +195,21 @@ async function changePassword(req, res, next) {
   }
 }
 
+// PATCH /users/me/name
+async function changeName(req, res, next) {
+  try {
+    const { name } = req.body;
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { name },
+    });
+    recordAudit({ userId: user.id, action: 'name_changed', entityType: 'User', entityId: user.id });
+    return res.status(200).json({ user: { id: user.id, name: user.name } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   getWalletInfo,
   upsertPatientDetails,
@@ -204,4 +219,5 @@ module.exports = {
   createVital,
   listVitals,
   changePassword,
+  changeName,
 };
