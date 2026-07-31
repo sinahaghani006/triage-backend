@@ -47,6 +47,9 @@ model User {
   role          UserRole  @default(patient)
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
+  // 2026-07-31: optional health-profile prompt, dismissible; Frontend
+  // re-shows the prompt next session unless this is set.
+  healthProfileReminderDismissedAt DateTime? @map("health_profile_reminder_dismissed_at")
 
   sessions          Session[]
   patientDetails    PatientDetails?

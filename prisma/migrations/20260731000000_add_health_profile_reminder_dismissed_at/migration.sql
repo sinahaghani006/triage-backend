@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "health_profile_reminder_dismissed_at" TIMESTAMP(3);

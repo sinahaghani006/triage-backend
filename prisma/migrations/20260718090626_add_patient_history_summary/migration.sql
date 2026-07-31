@@ -1,4 +1,4 @@
-﻿CREATE TABLE "patient_history_summaries" (
+CREATE TABLE "patient_history_summaries" (
     "id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
     "session_id" TEXT NOT NULL,

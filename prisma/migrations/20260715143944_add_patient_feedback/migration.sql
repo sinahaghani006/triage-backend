@@ -1,4 +1,4 @@
-﻿CREATE TABLE "patient_feedback" (
+CREATE TABLE "patient_feedback" (
     "id" TEXT NOT NULL,
     "session_id" TEXT NOT NULL,
     "rating" INTEGER NOT NULL,

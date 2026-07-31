@@ -1,4 +1,4 @@
-﻿CREATE TABLE "medical_history" (
+CREATE TABLE "medical_history" (
     "id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
     "chronic_conditions" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
