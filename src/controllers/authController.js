@@ -1,4 +1,4 @@
-﻿const bcrypt = require('bcrypt');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prismaClient');
 const AppError = require('../utils/AppError');
@@ -10,7 +10,7 @@ const SALT_ROUNDS = 12;
 const AUTH_COOKIE_NAME = 'token';
 
 function signToken(user) {
-  return jwt.sign({ sub: user.id, email: user.email, role: user.role }, jwtSecret, {
+  return jwt.sign({ sub: user.id, email: user.email, role: user.role, name: user.name }, jwtSecret, {
     expiresIn: jwtExpiresIn,
   });
 }

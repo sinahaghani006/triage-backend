@@ -31,13 +31,18 @@ async function getHistorySummary(req, res, next) {
       where: { userId: req.user.id },
     });
 
-    // 2026-07-30: CEO request -- Frontend needs to display the user's name
-    // in two UI spots (identity-confirmation gate + triage header) but has
-    // no way to read it (httpOnly session cookie, name only returned once
-    // at register/login). Reusing this endpoint per Frontend's own suggestion
-    // rather than adding a new one.
+    // 2026-07-30 fix: req.user.name doesn't exist -- authenticate.js never put
+    // name on req.user (JWT payload never signed it either, until this same
+    // commit). Older tokens issued before this fix also won't have a name
+    // claim even now, so this reads name directly from the DB to guarantee
+    // correctness regardless of when the caller's token was issued.
+    const userRecord = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { name: true },
+    });
+
     return res.status(200).json({
-      name: req.user.name,
+      name: userRecord?.name ?? null,
       history,
       lastAge: patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null,
       lastWeightKg: patientRecord?.weightKg ?? null,
