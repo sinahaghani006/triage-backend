@@ -7,6 +7,7 @@ const authRoutes = require('./routes/authRoutes');
 const sessionRoutes = require('./routes/sessionRoutes');
 const presentingProblemsRoutes = require('./routes/presentingProblemsRoutes');
 const userRoutes = require('./routes/userRoutes');
+const plansRoutes = require('./routes/plansRoutes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { nodeEnv, frontendOrigin } = require('./config/env');
 
@@ -28,6 +29,7 @@ function createApp() {
   app.use('/sessions', sessionRoutes);
   app.use('/presenting-problems', presentingProblemsRoutes);
   app.use('/users', userRoutes);
+  app.use('/plans', plansRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
