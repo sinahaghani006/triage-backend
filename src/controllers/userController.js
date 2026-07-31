@@ -41,9 +41,19 @@ async function getHistorySummary(req, res, next) {
       select: { name: true, healthProfileReminderDismissedAt: true },
     });
 
+    // 24h cooldown before re-showing the optional health-profile prompt
+    // (Frontend request 2026-07-31: without this, the prompt reappears
+    // every time /triage remounts, since dismissal is otherwise only
+    // component-level state with no real effect).
+    const HEALTH_PROFILE_REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+    const dismissedAt = userRecord?.healthProfileReminderDismissedAt ?? null;
+    const shouldShowHealthProfilePrompt =
+      !dismissedAt || (Date.now() - new Date(dismissedAt).getTime()) > HEALTH_PROFILE_REMINDER_COOLDOWN_MS;
+
     return res.status(200).json({
       name: userRecord?.name ?? null,
-      healthProfileReminderDismissedAt: userRecord?.healthProfileReminderDismissedAt ?? null,
+      healthProfileReminderDismissedAt: dismissedAt,
+      shouldShowHealthProfilePrompt,
       history,
       lastAge: patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null,
       lastWeightKg: patientRecord?.weightKg ?? null,
