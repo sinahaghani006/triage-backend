@@ -17,5 +17,6 @@ router.patch('/me/patient-details', patientDetailsValidator, validateRequest, us
 router.get('/me/wallet', userController.getWalletInfo);
 router.patch('/me/password', changePasswordValidator, validateRequest, userController.changePassword);
 router.patch('/me/name', changeNameValidator, validateRequest, userController.changeName);
+router.patch('/me/health-profile-reminder', userController.dismissHealthProfileReminder);
 
 module.exports = router;

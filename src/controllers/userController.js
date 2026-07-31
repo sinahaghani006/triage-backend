@@ -38,11 +38,12 @@ async function getHistorySummary(req, res, next) {
     // correctness regardless of when the caller's token was issued.
     const userRecord = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { name: true },
+      select: { name: true, healthProfileReminderDismissedAt: true },
     });
 
     return res.status(200).json({
       name: userRecord?.name ?? null,
+      healthProfileReminderDismissedAt: userRecord?.healthProfileReminderDismissedAt ?? null,
       history,
       lastAge: patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null,
       lastWeightKg: patientRecord?.weightKg ?? null,
@@ -210,6 +211,19 @@ async function changeName(req, res, next) {
   }
 }
 
+// PATCH /users/me/health-profile-reminder
+async function dismissHealthProfileReminder(req, res, next) {
+  try {
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { healthProfileReminderDismissedAt: new Date() },
+    });
+    return res.status(200).json({ healthProfileReminderDismissedAt: user.healthProfileReminderDismissedAt });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   getWalletInfo,
   upsertPatientDetails,
@@ -220,4 +234,5 @@ module.exports = {
   listVitals,
   changePassword,
   changeName,
+  dismissHealthProfileReminder,
 };
