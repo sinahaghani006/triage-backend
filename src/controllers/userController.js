@@ -31,7 +31,13 @@ async function getHistorySummary(req, res, next) {
       where: { userId: req.user.id },
     });
 
+    // 2026-07-30: CEO request -- Frontend needs to display the user's name
+    // in two UI spots (identity-confirmation gate + triage header) but has
+    // no way to read it (httpOnly session cookie, name only returned once
+    // at register/login). Reusing this endpoint per Frontend's own suggestion
+    // rather than adding a new one.
     return res.status(200).json({
+      name: req.user.name,
       history,
       lastAge: patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null,
       lastWeightKg: patientRecord?.weightKg ?? null,
