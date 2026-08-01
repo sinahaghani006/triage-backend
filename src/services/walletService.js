@@ -16,7 +16,7 @@ async function assertCanStartTriage(userId) {
   const wallet = await prisma.wallet.findUnique({ where: { userId } });
   if (!wallet || wallet.balance < COST_PER_TRIAGE) {
     throw new AppError(
-      "Insufficient wallet balance for a new triage",
+      "موجودی کیف‌پول برای شروع یک تریاژ جدید کافی نیست",
       402,
       "INSUFFICIENT_BALANCE",
     );
