@@ -95,14 +95,15 @@ async function generateSessionQuestions(req, res, next) {
 
     const { presentingProblemId, patientDetails } = req.body;
 
-    // 2026-07-27 fix: Frontend never implemented the birthDate-based two-step
-    // registration (PATCH /users/me/patient-details is never called), so
-    // requiring a pre-existing PatientDetails row here broke every real user.
-    // Age is now sent fresh with each request instead, like gender/weight/height.
-    const age = Number(patientDetails?.age);
-    if (!Number.isFinite(age) || age <= 0) {
-      throw new AppError('Patient age is required (patientDetails.age)', 400, 'AGE_REQUIRED');
+    // 2026-08-01 (PM decision, reverting the 2026-07-27 age-direct fix):
+    // birthDate is the real source of truth for age again; Frontend sends
+    // it fresh in patientDetails (same object as gender/weight/height, not
+    // a separate two-step endpoint -- that approach failed before because
+    // Frontend never called it). Age is always computed server-side.
+    if (!patientDetails?.birthDate) {
+      throw new AppError('Patient birthDate is required (patientDetails.birthDate)', 400, 'BIRTHDATE_REQUIRED');
     }
+    const age = calculateAge(patientDetails.birthDate);
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
 
@@ -157,22 +158,19 @@ async function submitSymptoms(req, res, next) {
 
     const { presentingProblemId, patientDetails, answers } = req.body;
 
-    // 2026-07-27 fix: same as generate-questions -- age comes fresh from the
-    // request body now, not from a stored PatientDetails.birthDate that
-    // Frontend never actually creates.
-    const age = Number(patientDetails?.age);
-    if (!Number.isFinite(age) || age <= 0) {
-      throw new AppError('Patient age is required (patientDetails.age)', 400, 'AGE_REQUIRED');
+    // 2026-08-01 (PM decision, reverting the 2026-07-27 age-direct fix):
+    // birthDate is the real source of truth again; age is always computed
+    // server-side from it, never trusted from the client.
+    if (!patientDetails?.birthDate) {
+      throw new AppError('Patient birthDate is required (patientDetails.birthDate)', 400, 'BIRTHDATE_REQUIRED');
     }
+    const age = calculateAge(patientDetails.birthDate);
 
     const submittedWeight = patientDetails?.weightKg ?? patientDetails?.weight;
     const submittedHeight = patientDetails?.heightCm ?? patientDetails?.height;
     const submittedGender = patientDetails?.gender;
-    // 2026-08-01 migration: age is now always persisted (not just when
-    // weight/height/gender are also present), since it's the real
-    // authoritative value going forward -- birthDate below is only kept
-    // as a synthetic NOT-NULL placeholder for rollback safety, never read.
-    const patientUpdateData = { age };
+    // birthDate is the real source of truth; age is kept in sync as a cache.
+    const patientUpdateData = { age, birthDate: new Date(patientDetails.birthDate) };
     if (submittedWeight !== undefined && submittedWeight !== null) {
       patientUpdateData.weightKg = submittedWeight;
     }
@@ -182,14 +180,11 @@ async function submitSymptoms(req, res, next) {
     if (submittedGender !== undefined && submittedGender !== null) {
       patientUpdateData.gender = submittedGender;
     }
-    {
-      const approxBirthDate = new Date(new Date().getFullYear() - age, 0, 1);
-      await prisma.patientDetails.upsert({
-        where: { userId: req.user.id },
-        create: { userId: req.user.id, birthDate: approxBirthDate, ...patientUpdateData },
-        update: patientUpdateData,
-      });
-    }
+    await prisma.patientDetails.upsert({
+      where: { userId: req.user.id },
+      create: { userId: req.user.id, ...patientUpdateData },
+      update: patientUpdateData,
+    });
 
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
@@ -477,12 +472,12 @@ async function secondRoundQuestions(req, res, next) {
 
     const { presentingProblemId, patientDetails, round1QuestionsAsked, round1Responses } = req.body;
 
-    // 2026-07-27 fix: same as generate-questions -- age comes fresh from the
-    // request body now, not from a stored PatientDetails.birthDate.
-    const age = Number(patientDetails?.age);
-    if (!Number.isFinite(age) || age <= 0) {
-      throw new AppError('Patient age is required (patientDetails.age)', 400, 'AGE_REQUIRED');
+    // 2026-08-01 (PM decision, reverting the 2026-07-27 age-direct fix):
+    // birthDate is the real source of truth for age again.
+    if (!patientDetails?.birthDate) {
+      throw new AppError('Patient birthDate is required (patientDetails.birthDate)', 400, 'BIRTHDATE_REQUIRED');
     }
+    const age = calculateAge(patientDetails.birthDate);
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
 

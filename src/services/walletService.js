@@ -25,7 +25,7 @@ async function assertCanStartTriage(userId) {
   const todaysCount = await countTodaysCompletedTriages(userId);
   if (todaysCount >= DAILY_TRIAGE_LIMIT) {
     throw new AppError(
-      "Daily triage limit reached. Please upgrade your plan to continue today.",
+      "سقف تعداد تریاژ روزانه پر شده است. برای ادامه، لطفاً پلن خود را ارتقا دهید.",
       429,
       "DAILY_LIMIT_REACHED",
     );
