@@ -136,10 +136,32 @@ async function createVital(req, res, next) {
 // GET /users/me/vitals Ã¢â‚¬â€ history, optionally filtered by ?type=
 async function listVitals(req, res, next) {
   try {
-    const { type } = req.query;
+    const { type, from, to } = req.query;
     const limit = Number(req.query.limit) || 20;
+
+    // 2026-08-01 (PM request #6): date-range filter for trend charts.
+    const recordedAtFilter = {};
+    if (from) {
+      const fromDate = new Date(from);
+      if (Number.isNaN(fromDate.getTime())) {
+        throw new AppError('from must be a valid date', 400, 'VALIDATION_ERROR');
+      }
+      recordedAtFilter.gte = fromDate;
+    }
+    if (to) {
+      const toDate = new Date(to);
+      if (Number.isNaN(toDate.getTime())) {
+        throw new AppError('to must be a valid date', 400, 'VALIDATION_ERROR');
+      }
+      recordedAtFilter.lte = toDate;
+    }
+
     const vitals = await prisma.periodicVitals.findMany({
-      where: { userId: req.user.id, ...(type ? { type } : {}) },
+      where: {
+        userId: req.user.id,
+        ...(type ? { type } : {}),
+        ...(Object.keys(recordedAtFilter).length > 0 ? { recordedAt: recordedAtFilter } : {}),
+      },
       orderBy: { recordedAt: 'desc' },
       take: limit,
     });
