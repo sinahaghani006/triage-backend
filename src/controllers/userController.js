@@ -50,10 +50,18 @@ async function getHistorySummary(req, res, next) {
     const shouldShowHealthProfilePrompt =
       !dismissedAt || (Date.now() - new Date(dismissedAt).getTime()) > HEALTH_PROFILE_REMINDER_COOLDOWN_MS;
 
+    // 2026-08-01 (Frontend request): so the referral-redeem form can be
+    // hidden after one successful redemption instead of showing it every
+    // time and letting the user hit REFERRAL_ALREADY_REDEEMED on retry.
+    const referralRedemption = await prisma.referralRedemption.findUnique({
+      where: { invitedUserId: req.user.id },
+    });
+
     return res.status(200).json({
       name: userRecord?.name ?? null,
       healthProfileReminderDismissedAt: dismissedAt,
       shouldShowHealthProfilePrompt,
+      hasRedeemedReferral: !!referralRedemption,
       history,
       lastAge: patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null,
       lastWeightKg: patientRecord?.weightKg ?? null,
