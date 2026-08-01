@@ -99,6 +99,16 @@ const FINAL_PRESENTING_PROBLEMS = [
     labelFa: 'کمردرد، آسیب یا زخم سطحی',
     synonyms: ['کمردرد', 'بریدگی', 'کوفتگی', 'آسیب'],
   },
+  {
+    // 2026-08-01: added to support the new free-text "other symptoms" flow
+    // (AI team, commit 84fd54b). This is a stopgap addition of ONE item;
+    // the full 14-category redesign PM mentioned is still pending and
+    // needs an explicit list before this file is restructured further
+    // (this file is marked sensitive -- source of 4 past regressions).
+    id: 'other_symptoms',
+    labelFa: 'سایر علائم',
+    synonyms: [],
+  },
 ];
 
 /**

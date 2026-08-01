@@ -488,6 +488,7 @@ async function secondRoundQuestions(req, res, next) {
       sex: patientDetails?.gender,
       weightKg: patientDetails?.weightKg ?? patientDetails?.weight,
       heightCm: patientDetails?.heightCm ?? patientDetails?.height,
+      otherSymptomsText: patientDetails?.otherSymptomsText,
       round1QuestionsAsked,
       round1Responses,
       patientHistory,

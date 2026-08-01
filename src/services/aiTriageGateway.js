@@ -56,6 +56,9 @@ function toAiPatientResponses({ presentingProblemId, patientDetails = {}, answer
     sex: patientDetails.gender,
     weightKg: patientDetails.weightKg ?? patientDetails.weight,
     heightCm: patientDetails.heightCm ?? patientDetails.height,
+    // 2026-08-01 (AI team feature): only meaningful when presentingProblemId
+    // is "other_symptoms" -- free text the patient typed themself.
+    otherSymptomsText: patientDetails.otherSymptomsText,
     questionsAsked: answers.map((a) => a.questionId),
     responses: answers.map((a) => a.answer),
     patientHistory,
@@ -138,6 +141,7 @@ async function generateQuestions({ presentingProblemId, age, patientDetails = {}
       age,
       sex: patientDetails.gender,
       weightKg: patientDetails.weightKg ?? patientDetails.weight,
+      otherSymptomsText: patientDetails.otherSymptomsText,
       providerFn,
       patientHistory: patientHistory || [],
       medicalHistory,
@@ -179,6 +183,7 @@ async function generateSecondRoundQuestions({
   sex,
   weightKg,
   heightCm,
+  otherSymptomsText,
   round1QuestionsAsked,
   round1Responses,
   patientHistory,
@@ -205,6 +210,7 @@ async function generateSecondRoundQuestions({
       sex,
       weightKg,
       heightCm,
+      otherSymptomsText,
       round1QuestionsAsked,
       round1Responses,
       patientHistory: patientHistory || [],
