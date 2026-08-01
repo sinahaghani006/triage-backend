@@ -63,7 +63,7 @@ async function getHistorySummary(req, res, next) {
       shouldShowHealthProfilePrompt,
       hasRedeemedReferral: !!referralRedemption,
       history,
-      lastAge: patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null,
+      lastAge: patientRecord?.age ?? (patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null), // age column is authoritative now; birthDate fallback only for any row backfill somehow missed
       lastWeightKg: patientRecord?.weightKg ?? null,
       lastHeightCm: patientRecord?.heightCm ?? null,
       lastGender: patientRecord?.gender ?? null,

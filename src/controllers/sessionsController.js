@@ -168,7 +168,11 @@ async function submitSymptoms(req, res, next) {
     const submittedWeight = patientDetails?.weightKg ?? patientDetails?.weight;
     const submittedHeight = patientDetails?.heightCm ?? patientDetails?.height;
     const submittedGender = patientDetails?.gender;
-    const patientUpdateData = {};
+    // 2026-08-01 migration: age is now always persisted (not just when
+    // weight/height/gender are also present), since it's the real
+    // authoritative value going forward -- birthDate below is only kept
+    // as a synthetic NOT-NULL placeholder for rollback safety, never read.
+    const patientUpdateData = { age };
     if (submittedWeight !== undefined && submittedWeight !== null) {
       patientUpdateData.weightKg = submittedWeight;
     }
@@ -178,15 +182,7 @@ async function submitSymptoms(req, res, next) {
     if (submittedGender !== undefined && submittedGender !== null) {
       patientUpdateData.gender = submittedGender;
     }
-    if (Object.keys(patientUpdateData).length > 0) {
-      // 2026-07-27 fix: upsert instead of update -- no PatientDetails row is
-      // ever pre-created (see age fix above), so a plain update() threw an
-      // uncaught Prisma "record not found" error for every real user here.
-      // birthDate is still NOT NULL in the schema without a migration, so we
-      // synthesize an approximate one from the age just received, purely to
-      // satisfy the column -- age calculations never read it back.
-      // TODO: proper migration to make birthDate nullable (or add a real
-      // age column) and drop this synthetic value.
+    {
       const approxBirthDate = new Date(new Date().getFullYear() - age, 0, 1);
       await prisma.patientDetails.upsert({
         where: { userId: req.user.id },

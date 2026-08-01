@@ -113,15 +113,19 @@ model ReferralRedemption {
   @@index([referralCodeId])
 }
 
-// Static demographic data about the patient. birthDate is the source of
-// truth for age -- age is computed server-side at submit-symptoms time.
-// 2026-07-21: no longer captured during /auth/register itself -- the
-// Frontend now calls PATCH /users/me/patient-details as registration
-// step 2, immediately after step 1 (email/password) succeeds.
+// Static demographic data about the patient.
+// 2026-08-01 migration: `age` is now the real, authoritative source of
+// truth (sent fresh by Frontend with every request and persisted here).
+// `birthDate` was never a real user-entered value -- Frontend never
+// implemented the two-step registration this was designed for, so it was
+// always a synthetic approximation. Kept ONLY for rollback safety; DO NOT
+// read from it anymore. Safe to drop in a future migration once `age`
+// has been confirmed stable in production for a while.
 model PatientDetails {
   id        String   @id @default(uuid())
   userId    String   @unique @map("user_id")
-  birthDate DateTime @map("birth_date")
+  birthDate DateTime @map("birth_date") // DEPRECATED: replaced by `age`, kept for rollback only
+  age       Int?     @map("age")
   weightKg  Float?   @map("weight_kg")
   heightCm  Float?   @map("height_cm")
   gender    String?  @map("gender")
