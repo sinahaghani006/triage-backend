@@ -7,6 +7,7 @@ const calculateAge = require('../utils/calculateAge');
 const { generateQuestions, generateSecondRoundQuestions } = require('../services/aiTriageGateway');
 const { recordHistorySummary, getRecentHistorySummary } = require('../services/patientHistoryService');
 const { assertCanStartTriage, deductForCompletedTriage } = require('../services/walletService');
+const { creditReferralIfApplicable } = require('../services/referralService');
 function toPublicSession(session) {
   return {
     id: session.id,
@@ -269,6 +270,11 @@ async function submitSymptoms(req, res, next) {
       } catch (historyErr) {
         // Best-effort: never let history-summary recording break the main flow.
       }
+      try {
+        await creditReferralIfApplicable(req.user.id);
+      } catch (referralErr) {
+        // Best-effort: never let referral crediting break the main flow.
+      }
     }
 
     return res.status(200).json({ session: toPublicSession(updatedSession) });
@@ -331,6 +337,11 @@ async function staffFinalizeReview(req, res, next) {
       });
     } catch (historyErr) {
       // Best-effort: never let history-summary recording break the main flow.
+    }
+    try {
+      await creditReferralIfApplicable(updated.userId);
+    } catch (referralErr) {
+      // Best-effort: never let referral crediting break the main flow.
     }
 
     return res.status(200).json({ session: toPublicSession(updated) });
@@ -541,6 +552,11 @@ async function secondRoundQuestions(req, res, next) {
           });
         } catch (historyErr) {
           // Best-effort: never let history-summary recording break the main flow.
+        }
+        try {
+          await creditReferralIfApplicable(req.user.id);
+        } catch (referralErr) {
+          // Best-effort: never let referral crediting break the main flow.
         }
       }
 
