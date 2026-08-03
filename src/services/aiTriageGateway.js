@@ -60,7 +60,7 @@ function toAiPatientResponses({ presentingProblemId, patientDetails = {}, answer
     // is "other_symptoms" -- free text the patient typed themself.
     otherSymptomsText: patientDetails.otherSymptomsText,
     questionsAsked: answers.map((a) => a.questionText),
-    patientResponses: answers.map((a) => a.answer),
+    responses: answers.map((a) => a.answer),
     patientHistory,
     medicalHistory,
   };
