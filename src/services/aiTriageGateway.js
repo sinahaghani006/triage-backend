@@ -1,4 +1,4 @@
-const AppError = require("../utils/AppError");
+﻿const AppError = require("../utils/AppError");
 const { createGroqProvider } = require("../ai/providers/groqProvider");
 const { ResponseValidationError } = require("../ai/responseValidator");
 const { AIConnectorError } = require("../ai/aiConnector");
@@ -59,8 +59,8 @@ function toAiPatientResponses({ presentingProblemId, patientDetails = {}, answer
     // 2026-08-01 (AI team feature): only meaningful when presentingProblemId
     // is "other_symptoms" -- free text the patient typed themself.
     otherSymptomsText: patientDetails.otherSymptomsText,
-    questionsAsked: answers.map((a) => a.questionId),
-    responses: answers.map((a) => a.answer),
+    questionsAsked: answers.map((a) => a.questionText),
+    patientResponses: answers.map((a) => a.answer),
     patientHistory,
     medicalHistory,
   };

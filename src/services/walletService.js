@@ -1,7 +1,8 @@
-const prisma = require("../config/prismaClient");
+﻿const prisma = require("../config/prismaClient");
 const AppError = require("../utils/AppError");
+const { PLANS } = require("../config/plans");
 
-const DAILY_TRIAGE_LIMIT = 20; // temporarily raised for testing (project manager, 2026-07-24) -- was 5
+const DAILY_TRIAGE_LIMIT = PLANS.FREEMIUM.dailyFreeTriages; // single source of truth: src/config/plans.js (CEO decision, 2026-08-02)
 const COST_PER_TRIAGE = 5000; // Toman (project manager decision 2026-07-24) -- was 10000
 
 async function countTodaysCompletedTriages(userId) {
