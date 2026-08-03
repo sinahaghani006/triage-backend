@@ -85,6 +85,7 @@ function validateAIResponse(rawText) {
 
   // *** لایه‌ی دفاعی — نگاه کن به یادداشت ensureDefinitiveDiagnosisDisclaimer
   // پایین‌تر در همین فایل. ***
+  logIfDefinitiveLanguageDetected(result.data.reasoning, 'round1-final');
   return {
     ...result.data,
     reasoning: ensureDefinitiveDiagnosisDisclaimer(result.data.reasoning),
@@ -240,12 +241,10 @@ function sanitizeRecommendations(recommendations) {
  * تکراری/عجیب در انتهای reasoningهایی که از قبل چیزی مشابه گفته‌اند
  * جلوگیری می‌کند.
  *
- * *** یادداشت برای تحقیق در حال انجام (تأیید مدیرعامل): *** این تابع
- * فقط غیبت جمله‌ی تأکیدی را جبران می‌کند — مسئله‌ی جداگانه‌ی «عبارت
- * قطعی به‌جای احتمالی در بدنه‌ی reasoning» (مثلاً «نشان‌دهنده‌ی X است»
- * به‌جای «می‌تواند نشان‌دهنده‌ی X باشد») هنوز اینجا فیکس نشده — منتظر
- * نمونه‌های بیشتر برای تشخیص الگو/استثنا هستیم؛ اگر الگو تأیید شد، این
- * تابع یا یک تابع مشابه باید گسترش پیدا کند.
+ * *** یادداشت — مسئله‌ی جداگانه‌ی «عبارت قطعی به‌جای احتمالی در بدنه‌ی
+ * reasoning» (مثلاً «نشان‌دهنده‌ی X است» به‌جای «می‌تواند نشان‌دهنده‌ی X
+ * باشد») توسط این تابع فیکس نمی‌شود — نگاه کن به findDefinitiveLanguageMatch
+ * / logIfDefinitiveLanguageDetected پایین‌تر در همین فایل. ***
  *
  * @param {string} reasoning
  * @returns {boolean}
@@ -276,6 +275,71 @@ function ensureDefinitiveDiagnosisDisclaimer(reasoning) {
   const alreadyEndsWithPunctuation = /[.!؟?]$/.test(trimmed);
   const separator = alreadyEndsWithPunctuation ? ' ' : '. ';
   return `${trimmed}${separator}${MANDATORY_DISCLAIMER_SENTENCE}`;
+}
+
+/**
+ * *** قابلیت جدید — تشخیص (بدون بازنویسی) زبان قطعی به‌جای احتمالی در
+ * بدنه‌ی reasoning. تأیید مدیر پروژه (این گفتگو)، بر اساس شواهد واقعی:
+ * از ۶ نمونه‌ی raw output واقعی بررسی‌شده (۵ بیمار/session جدا)، ۲ مورد
+ * (~۳۳٪، هر دو در urgency=normal) به‌جای عبارت احتمالی الزامی پرامپت
+ * («می‌تواند نشان‌دهنده‌ی X باشد») از عبارت قطعی («نشان‌دهنده‌ی X است»)
+ * استفاده کرده بودند. با این حجم نمونه، نمی‌شود قطعی گفت این یک الگوی
+ * سیستماتیک همیشگی است یا نوسان طبیعی مدل — این تابع برای رصد نرخ واقعی
+ * در طول زمان است، نه یک نتیجه‌گیری نهایی.
+ *
+ * *** طراحی: فقط تشخیص + لاگ، عمداً بدون بازنویسی خودکار متن — تأیید
+ * صریح مدیر پروژه. *** برخلاف ensureDefinitiveDiagnosisDisclaimer (که
+ * صرفاً یک جمله‌ی ثابت و از‌قبل‌نوشته را اضافه می‌کند)، تبدیل خودکار یک
+ * جمله‌ی فارسی موجود از قطعی به احتمالی با regex ریسک بالایی برای تولید
+ * متنی نامفهوم یا از نظر دستوری غلط دارد — این با افزودن یک جمله‌ی ثابت
+ * در انتها کاملاً فرق دارد. تصمیم تأییدشده: فقط تشخیص و لاگ، تا نرخ
+ * واقعی این الگو قابل‌ردیابی/گزارش‌گیری شود؛ تصمیم درباره‌ی بازنویسی
+ * خودکار یا retry (اگر لازم شد) باید جداگانه و با شواهد بیشتر تأیید شود.
+ *
+ * *** محدودیت شناخته‌شده: *** لیست کوچک و اولیه‌ای از الگوهای رایج
+ * قطعیت، بر اساس همان ۲ نمونه‌ی واقعی دیده‌شده — نه یک تشخیص‌دهنده‌ی
+ * زبانی کامل. مثل CLINICAL_CONCEPT_SYNONYMS، باید با داده‌ی بیشتر
+ * گسترش/تنظیم شود؛ ممکن است هم false negative (زبان قطعیِ دیگری که این
+ * الگوها نمی‌گیرند) هم false positive (جمله‌ای که این الگو را دارد ولی
+ * واقعاً مشکل‌ساز نیست) داشته باشد.
+ */
+const DEFINITIVE_LANGUAGE_PATTERNS = [
+  /نشان‌دهنده‌ی[^.،؛]*\sاست\b/,
+  /بیانگر[^.،؛]*\sاست\b/,
+  /قطعاً/,
+  /مسلماً/,
+  /بدون شک/,
+];
+
+/**
+ * @param {string} reasoning
+ * @returns {string|null} خودِ عبارت مطابقت‌یافته (برای لاگ)، یا null اگر چیزی پیدا نشد
+ */
+function findDefinitiveLanguageMatch(reasoning) {
+  if (typeof reasoning !== 'string') return null;
+  for (const pattern of DEFINITIVE_LANGUAGE_PATTERNS) {
+    const match = reasoning.match(pattern);
+    if (match) return match[0];
+  }
+  return null;
+}
+
+/**
+ * فقط تشخیص می‌دهد و لاگ می‌کند — reasoning را کاملاً دست‌نخورده
+ * برمی‌گرداند. نگاه کن به یادداشت DEFINITIVE_LANGUAGE_PATTERNS بالا
+ * برای چرایی عدم بازنویسی خودکار.
+ * @param {string} reasoning
+ * @param {string} contextLabel - برای لاگ، مثلاً 'round1-final' یا 'round2-escalate'
+ * @returns {string} همان reasoning ورودی، بدون هیچ تغییر
+ */
+function logIfDefinitiveLanguageDetected(reasoning, contextLabel) {
+  const match = findDefinitiveLanguageMatch(reasoning);
+  if (match) {
+    console.warn(
+      `[DEFINITIVE_LANGUAGE_DETECTED] context=${contextLabel} | matched="${match}" | این reasoning از عبارت قطعی به‌جای عبارت احتمالیِ الزامی پرامپت استفاده کرده — نگاه کن به یادداشت DEFINITIVE_LANGUAGE_PATTERNS در responseValidator.js. متن کامل reasoning: ${reasoning}`
+    );
+  }
+  return reasoning;
 }
 
 /**
@@ -517,6 +581,7 @@ function validateSecondRoundResponse(rawText, { round1QuestionTexts = [] } = {})
     }
     // *** لایه‌ی دفاعی — نگاه کن به یادداشت ensureDefinitiveDiagnosisDisclaimer
     // بالاتر در همین فایل. همان تضمین برای escalate دور دوم هم اعمال می‌شود. ***
+    logIfDefinitiveLanguageDetected(result.data.reasoning, 'round2-escalate');
     return {
       ...result.data,
       reasoning: ensureDefinitiveDiagnosisDisclaimer(result.data.reasoning),
@@ -599,4 +664,6 @@ module.exports = {
   findDuplicateRound2QuestionIndexes,
   hasDefinitiveDiagnosisDisclaimer,
   ensureDefinitiveDiagnosisDisclaimer,
+  findDefinitiveLanguageMatch,
+  logIfDefinitiveLanguageDetected,
 };
