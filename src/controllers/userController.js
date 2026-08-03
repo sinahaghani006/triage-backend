@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+﻿const bcrypt = require('bcrypt');
 const prisma = require('../config/prismaClient');
 const AppError = require('../utils/AppError');
 const { recordAudit } = require('../services/auditLogService');
@@ -64,6 +64,7 @@ async function getHistorySummary(req, res, next) {
       hasRedeemedReferral: !!referralRedemption,
       history,
       lastAge: patientRecord?.age ?? (patientRecord ? calculateAgeFromBirthDate(patientRecord.birthDate) : null), // age column is authoritative now; birthDate fallback only for any row backfill somehow missed
+      lastBirthDate: patientRecord?.birthDate ?? null, // Frontend request 2026-08: exact stored birthDate for date-picker prefill on returning users
       lastWeightKg: patientRecord?.weightKg ?? null,
       lastHeightCm: patientRecord?.heightCm ?? null,
       lastGender: patientRecord?.gender ?? null,
