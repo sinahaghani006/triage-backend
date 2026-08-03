@@ -29,6 +29,11 @@
  * این ترکیب دقیقاً از تکرار حادثه‌ی CJK قبلی (نرخ رد ۷۵٪) جلوگیری می‌کند،
  * چون دیگر هر تک‌کلمه‌ی خارجی باعث رد کل پاسخ نمی‌شود — فقط موارد واقعاً
  * غیرقابل‌اعتماد رد/retry می‌شوند.
+ *
+ * *** افزوده‌ی جدید — تضمین جمله‌ی تأکیدی «تشخیص قطعی فقط با معاینه‌ی
+ * پزشک ممکن است»: *** نگاه کن به ensureDefinitiveDiagnosisDisclaimer
+ * پایین‌تر در همین فایل — یک لایه‌ی safe-append مشابه sanitizeRecommendations
+ * که این جمله‌ی الزامی پرامپت را تضمین می‌کند، مستقل از وفاداری مدل.
  */
 
 const { AIRawResponseSchema, TriageQuestionsRawSchema, SecondRoundQuestionsSchema, SecondRoundEscalationSchema } = require('./schemas');
@@ -78,7 +83,12 @@ function validateAIResponse(rawText) {
     });
   }
 
-  return result.data;
+  // *** لایه‌ی دفاعی — نگاه کن به یادداشت ensureDefinitiveDiagnosisDisclaimer
+  // پایین‌تر در همین فایل. ***
+  return {
+    ...result.data,
+    reasoning: ensureDefinitiveDiagnosisDisclaimer(result.data.reasoning),
+  };
 }
 
 /**
@@ -200,6 +210,72 @@ function isRecommendationSuspicious(text) {
 function sanitizeRecommendations(recommendations) {
   if (!Array.isArray(recommendations)) return [];
   return recommendations.filter((r) => !isRecommendationSuspicious(r));
+}
+
+/**
+ * *** قابلیت جدید — تضمین کد-محور جمله‌ی الزامی «تشخیص قطعی فقط با
+ * معاینه‌ی پزشک ممکن است» در reasoning. تأیید مدیرعامل/مدیر پروژه (این
+ * گفتگو)، بر اساس شواهد واقعی: در ۲ از ۲ نمونه‌ی raw output واقعی
+ * بررسی‌شده‌ی این گفتگو (یکی normal، یکی doctor_review)، این جمله‌ی
+ * الزامیِ پرامپت (نگاه کن به PROBABILISTIC_INTERPRETATION_GUIDELINE در
+ * promptGenerator.js) در reasoning غایب بود — دقیقاً همان الگویی که
+ * قبلاً هم در این پروژه دیده شده (تکرار سؤالات دور دوم با وجود
+ * دستورالعمل صریح ضدتکرار): اتکای صرف به پیروی مدل از پرامپت کافی نیست.
+ *
+ * *** طراحی: تکمیل ایمن (safe-append)، نه reject/retry. *** غیبت این
+ * جمله یک نقص محتوایی است، نه یک نقض ایمنی حاد مثل نام دارو در
+ * recommendations (که در sanitizeRecommendations حذف می‌شود) — پس رد
+ * کردن کل پاسخ و تحمیل هزینه/تأخیر retry به آن نامتناسب است. در عوض،
+ * اگر جمله غایب باشد، خودِ کد آن را در انتهای reasoning اضافه می‌کند؛
+ * این هم ایمنی/شفافیت برای بیمار را تضمین می‌کند، هم مستقل از وفاداری
+ * مدل به پرامپت است.
+ *
+ * *** تشخیص حضور — عمداً مبتنی بر مفهوم، نه تطبیق متن دقیق: *** چون
+ * کوچک‌ترین بازنویسی مدل (کلمه‌ی متفاوت، ترتیب متفاوت) یک تطبیق متن
+ * دقیق را می‌شکند، این تابع دنبال هم‌زمانی دو مفهوم کلیدی می‌گردد:
+ * «تشخیص قطعی» و «معاینه». اگر هر دو در reasoning حضور داشته باشند،
+ * فرض می‌شود جمله از قبل به‌شکلی گنجانده شده — محافظه‌کارانه است (ممکن
+ * است گاهی جمله‌ای که این دو مفهوم را دارد ولی دقیقاً همین پیام را
+ * نمی‌رساند به‌اشتباه «موجود» تشخیص داده شود)، ولی از افزودن جمله‌ی
+ * تکراری/عجیب در انتهای reasoningهایی که از قبل چیزی مشابه گفته‌اند
+ * جلوگیری می‌کند.
+ *
+ * *** یادداشت برای تحقیق در حال انجام (تأیید مدیرعامل): *** این تابع
+ * فقط غیبت جمله‌ی تأکیدی را جبران می‌کند — مسئله‌ی جداگانه‌ی «عبارت
+ * قطعی به‌جای احتمالی در بدنه‌ی reasoning» (مثلاً «نشان‌دهنده‌ی X است»
+ * به‌جای «می‌تواند نشان‌دهنده‌ی X باشد») هنوز اینجا فیکس نشده — منتظر
+ * نمونه‌های بیشتر برای تشخیص الگو/استثنا هستیم؛ اگر الگو تأیید شد، این
+ * تابع یا یک تابع مشابه باید گسترش پیدا کند.
+ *
+ * @param {string} reasoning
+ * @returns {boolean}
+ */
+const DEFINITIVE_DIAGNOSIS_PHRASE_PATTERN = /تشخیص\s*قطعی/;
+const PHYSICIAN_EXAMINATION_PHRASE_PATTERN = /معاینه/;
+const MANDATORY_DISCLAIMER_SENTENCE = 'تشخیص قطعی فقط با معاینه‌ی پزشک ممکن است.';
+
+function hasDefinitiveDiagnosisDisclaimer(reasoning) {
+  if (typeof reasoning !== 'string') return false;
+  return DEFINITIVE_DIAGNOSIS_PHRASE_PATTERN.test(reasoning) && PHYSICIAN_EXAMINATION_PHRASE_PATTERN.test(reasoning);
+}
+
+/**
+ * اگر reasoning فاقد جمله‌ی الزامی تأکیدی باشد، آن را در انتها اضافه
+ * می‌کند. اگر reasoning رشته نباشد یا خالی باشد، بدون تغییر برمی‌گرداند
+ * (این تابع مسئول اعتبارسنجی نوع/وجود reasoning نیست — آن کار قبلاً
+ * توسط AIRawResponseSchema/SecondRoundEscalationSchema انجام شده).
+ *
+ * @param {string} reasoning
+ * @returns {string}
+ */
+function ensureDefinitiveDiagnosisDisclaimer(reasoning) {
+  if (typeof reasoning !== 'string' || reasoning.trim().length === 0) return reasoning;
+  if (hasDefinitiveDiagnosisDisclaimer(reasoning)) return reasoning;
+
+  const trimmed = reasoning.trim();
+  const alreadyEndsWithPunctuation = /[.!؟?]$/.test(trimmed);
+  const separator = alreadyEndsWithPunctuation ? ' ' : '. ';
+  return `${trimmed}${separator}${MANDATORY_DISCLAIMER_SENTENCE}`;
 }
 
 /**
@@ -439,7 +515,12 @@ function validateSecondRoundResponse(rawText, { round1QuestionTexts = [] } = {})
         { code: 'SECOND_ROUND_ESCALATION_SCHEMA_MISMATCH', cause: result.error, rawText }
       );
     }
-    return result.data;
+    // *** لایه‌ی دفاعی — نگاه کن به یادداشت ensureDefinitiveDiagnosisDisclaimer
+    // بالاتر در همین فایل. همان تضمین برای escalate دور دوم هم اعمال می‌شود. ***
+    return {
+      ...result.data,
+      reasoning: ensureDefinitiveDiagnosisDisclaimer(result.data.reasoning),
+    };
   }
 
   // escalate === false
@@ -516,4 +597,6 @@ module.exports = {
   sanitizeRecommendations,
   isRecommendationSuspicious,
   findDuplicateRound2QuestionIndexes,
+  hasDefinitiveDiagnosisDisclaimer,
+  ensureDefinitiveDiagnosisDisclaimer,
 };
