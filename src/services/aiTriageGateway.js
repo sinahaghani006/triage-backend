@@ -59,7 +59,7 @@ function toAiPatientResponses({ presentingProblemId, patientDetails = {}, answer
     // 2026-08-01 (AI team feature): only meaningful when presentingProblemId
     // is "other_symptoms" -- free text the patient typed themself.
     otherSymptomsText: patientDetails.otherSymptomsText,
-    questionsAsked: answers.map((a) => a.questionText),
+    questionsAsked: answers.map((a) => a.questionText ?? a.questionId), // accept either key name -- Frontend and Backend have gone back and forth on this naming; support both permanently instead of coordinating another change
     responses: answers.map((a) => a.answer),
     patientHistory,
     medicalHistory,
