@@ -1,4 +1,4 @@
-const prisma = require('../config/prismaClient');
+﻿const prisma = require('../config/prismaClient');
 const AppError = require('../utils/AppError');
 const { canTransition, resolveStateForUrgency, AUTO_FINALIZE_STATES } = require('../utils/sessionStateMachine');
 const { runAiTriageAnalysis } = require('../services/aiTriageGateway');
@@ -103,6 +103,9 @@ async function generateSessionQuestions(req, res, next) {
     if (!patientDetails?.birthDate) {
       throw new AppError('Patient birthDate is required (patientDetails.birthDate)', 400, 'BIRTHDATE_REQUIRED');
     }
+    if (Number.isNaN(new Date(patientDetails.birthDate).getTime())) {
+      throw new AppError('Patient birthDate must be a valid date (e.g. 2000-05-15)', 400, 'BIRTHDATE_INVALID_FORMAT');
+    }
     const age = calculateAge(patientDetails.birthDate);
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
@@ -163,6 +166,9 @@ async function submitSymptoms(req, res, next) {
     // server-side from it, never trusted from the client.
     if (!patientDetails?.birthDate) {
       throw new AppError('Patient birthDate is required (patientDetails.birthDate)', 400, 'BIRTHDATE_REQUIRED');
+    }
+    if (Number.isNaN(new Date(patientDetails.birthDate).getTime())) {
+      throw new AppError('Patient birthDate must be a valid date (e.g. 2000-05-15)', 400, 'BIRTHDATE_INVALID_FORMAT');
     }
     const age = calculateAge(patientDetails.birthDate);
 
@@ -476,6 +482,9 @@ async function secondRoundQuestions(req, res, next) {
     // birthDate is the real source of truth for age again.
     if (!patientDetails?.birthDate) {
       throw new AppError('Patient birthDate is required (patientDetails.birthDate)', 400, 'BIRTHDATE_REQUIRED');
+    }
+    if (Number.isNaN(new Date(patientDetails.birthDate).getTime())) {
+      throw new AppError('Patient birthDate must be a valid date (e.g. 2000-05-15)', 400, 'BIRTHDATE_INVALID_FORMAT');
     }
     const age = calculateAge(patientDetails.birthDate);
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
