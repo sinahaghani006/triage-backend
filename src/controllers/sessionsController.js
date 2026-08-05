@@ -95,6 +95,18 @@ async function generateSessionQuestions(req, res, next) {
 
     const { presentingProblemId, patientDetails } = req.body;
 
+    // Diagnostic audit log (added 2026-08-04): records every generate-questions
+    // call's presentingProblemId regardless of success/failure, so a future
+    // 400/mismatch investigation doesn't hit the same dead end -- this endpoint
+    // otherwise writes nothing to the Session row on success OR failure.
+    recordAudit({
+      userId: req.user.id,
+      action: 'generate_questions_requested',
+      entityType: 'Session',
+      entityId: sessionId,
+      metadata: { presentingProblemId, hasBirthDate: !!patientDetails?.birthDate },
+    });
+
     // 2026-08-01 (PM decision, reverting the 2026-07-27 age-direct fix):
     // birthDate is the real source of truth for age again; Frontend sends
     // it fresh in patientDetails (same object as gender/weight/height, not
