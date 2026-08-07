@@ -38,7 +38,7 @@ async function getHistorySummary(req, res, next) {
     // correctness regardless of when the caller's token was issued.
     const userRecord = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { name: true, healthProfileReminderDismissedAt: true },
+      select: { name: true, role: true, healthProfileReminderDismissedAt: true },
     });
 
     // 24h cooldown before re-showing the optional health-profile prompt
@@ -59,6 +59,7 @@ async function getHistorySummary(req, res, next) {
 
     return res.status(200).json({
       name: userRecord?.name ?? null,
+      role: userRecord?.role ?? null,
       healthProfileReminderDismissedAt: dismissedAt,
       shouldShowHealthProfilePrompt,
       hasRedeemedReferral: !!referralRedemption,

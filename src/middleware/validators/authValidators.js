@@ -1,10 +1,14 @@
-const { body } = require('express-validator');
+﻿const { body } = require('express-validator');
 
 const registerValidator = [
   body('name')
     .trim()
     .notEmpty().withMessage('name is required')
     .isLength({ max: 120 }).withMessage('name must be at most 120 characters'),
+  body('nationalId')
+    .trim()
+    .notEmpty().withMessage('nationalId is required')
+    .matches(/^\d{10}$/).withMessage('nationalId must be a 10-digit number'),
   body('email')
     .trim()
     .notEmpty().withMessage('email is required')

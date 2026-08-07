@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+﻿const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prismaClient');
 const AppError = require('../utils/AppError');
@@ -19,6 +19,7 @@ function toPublicUser(user) {
   return {
     id: user.id,
     name: user.name,
+    nationalId: user.nationalId,
     email: user.email,
     role: user.role,
     createdAt: user.createdAt,
@@ -44,7 +45,7 @@ function setAuthCookie(res, token) {
 // created for every new user with the default starting balance.
 async function register(req, res, next) {
   try {
-    const { name, email, password } = req.body;
+    const { name, nationalId, email, password } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -55,6 +56,7 @@ async function register(req, res, next) {
     const user = await prisma.user.create({
       data: {
         name,
+        nationalId,
         email,
         passwordHash,
         wallet: { create: {} },
