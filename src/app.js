@@ -10,6 +10,7 @@ const userRoutes = require('./routes/userRoutes');
 const plansRoutes = require('./routes/plansRoutes');
 const ordersRoutes = require('./routes/ordersRoutes');
 const referralsRoutes = require('./routes/referralsRoutes');
+const doctorRoutes = require('./routes/doctorRoutes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { nodeEnv, frontendOrigin } = require('./config/env');
 
@@ -34,6 +35,7 @@ function createApp() {
   app.use('/plans', plansRoutes);
   app.use('/orders', ordersRoutes);
   app.use('/referrals', referralsRoutes);
+  app.use('/doctor', doctorRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

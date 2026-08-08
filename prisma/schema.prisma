@@ -39,6 +39,18 @@ enum UserRole {
   admin
 }
 
+// doctorReviewStatus (2026-08-08, PM-approved, replaces two earlier
+// conflicting proposals): tracks the doctor panel's review pipeline for a
+// session, independent from SessionState/staffFinalizeReview.
+enum DoctorReviewStatus {
+  unfinished
+  ai_completed
+  doctor_message_sent
+  visited_inperson
+  appointment_scheduled
+  closed_no_action
+}
+
 model User {
   id            String    @id @default(uuid())
   name          String
@@ -147,6 +159,7 @@ model Session {
   // creation; also logged to AuditLog for accountability if disputed later.
   confirmedSelf       Boolean       @default(false) @map("confirmed_self")
   presentingProblemId String?       @map("presenting_problem_id")
+  doctorReviewStatus  DoctorReviewStatus @default(unfinished) @map("doctor_review_status")
   closedAt            DateTime?     @map("closed_at")
   cancelledAt         DateTime?     @map("cancelled_at")
   createdAt           DateTime      @default(now()) @map("created_at")
