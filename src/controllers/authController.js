@@ -1,4 +1,4 @@
-﻿const bcrypt = require('bcrypt');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prismaClient');
 const AppError = require('../utils/AppError');
@@ -50,6 +50,13 @@ async function register(req, res, next) {
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       throw new AppError('An account with this email already exists', 409, 'EMAIL_TAKEN');
+    }
+
+    if (nationalId) {
+      const existingNationalId = await prisma.user.findUnique({ where: { nationalId } });
+      if (existingNationalId) {
+        throw new AppError('An account with this national ID already exists', 409, 'NATIONAL_ID_TAKEN');
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
