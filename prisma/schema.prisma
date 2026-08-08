@@ -55,6 +55,7 @@ model User {
   id            String    @id @default(uuid())
   name          String
   nationalId    String?   @unique @map("national_id")
+  phoneNumber   String?   @map("phone_number")
   email         String    @unique
   passwordHash  String    @map("password_hash")
   role          UserRole  @default(patient)
@@ -274,13 +275,12 @@ model PeriodicVitals {
   @@index([userId, type])
 }
 
-// Wallet (2026-07-21, updated 2026-07-29 with actual current values from
-// production -- confirmed via GET /users/me/wallet, source of truth is
-// walletService.js not this comment): balance in Toman, default 1,000,000.
-// Each completed triage deducts 5,000. Daily limit is 20 triages, enforced
-// separately by counting today's PatientHistorySummary rows -- no counter
-// field needed. These are still not confirmed as final by the revenue
-// planning session -- update this comment again if/when they change.
+// Wallet (2026-08-08 fix, PM-confirmed): balance in Toman, default
+// 1,000,000. Each completed triage deducts 5,000. Daily limit is read
+// from PLANS.FREEMIUM.dailyFreeTriages (currently 5), enforced by
+// counting today's PatientHistorySummary rows -- no counter field
+// needed. Source of truth for all these values is walletService.js,
+// not this comment -- update here again if walletService.js changes.
 model Wallet {
   id        String   @id @default(uuid())
   userId    String   @unique @map("user_id")

@@ -1,4 +1,4 @@
-﻿const prisma = require("../config/prismaClient");
+const prisma = require("../config/prismaClient");
 const AppError = require("../utils/AppError");
 const { getRecentHistorySummary } = require("../services/patientHistoryService");
 
@@ -15,6 +15,7 @@ async function listPatients(req, res, next) {
         id: true,
         name: true,
         nationalId: true,
+        phoneNumber: true,
         sessions: {
           orderBy: { createdAt: "desc" },
           take: 1,
@@ -30,6 +31,7 @@ async function listPatients(req, res, next) {
         id: p.id,
         name: p.name,
         nationalId: p.nationalId,
+        phoneNumber: p.phoneNumber,
         doctorReviewStatus: latestSession?.doctorReviewStatus ?? null,
         presentingProblemId: latestSession?.presentingProblemId ?? null,
       };
@@ -47,20 +49,23 @@ async function getPatientDetail(req, res, next) {
     const { id } = req.params;
     const user = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, name: true, nationalId: true, email: true, role: true, createdAt: true },
+      select: { id: true, name: true, nationalId: true, phoneNumber: true, email: true, role: true, createdAt: true },
     });
     if (!user || user.role !== "patient") {
       throw new AppError("Patient not found", 404, "PATIENT_NOT_FOUND");
     }
-    const patientDetails = await prisma.patientDetails.findUnique({ where: { userId: id } });
-    const medicalHistory = await prisma.medicalHistory.findUnique({ where: { userId: id } });
-    const triageHistory = await getRecentHistorySummary(id, 20);
+    const [patientDetails, medicalHistory, triageHistory] = await Promise.all([
+      prisma.patientDetails.findUnique({ where: { userId: id } }),
+      prisma.medicalHistory.findUnique({ where: { userId: id } }),
+      getRecentHistorySummary(id, 20),
+    ]);
 
     return res.status(200).json({
       patient: {
         id: user.id,
         name: user.name,
         nationalId: user.nationalId,
+        phoneNumber: user.phoneNumber,
         email: user.email,
         birthDate: patientDetails?.birthDate ?? null,
         age: patientDetails?.age ?? null,
