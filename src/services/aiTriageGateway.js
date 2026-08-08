@@ -1,4 +1,4 @@
-﻿const AppError = require("../utils/AppError");
+const AppError = require("../utils/AppError");
 const { createGroqProvider } = require("../ai/providers/groqProvider");
 const { ResponseValidationError } = require("../ai/responseValidator");
 const { AIConnectorError } = require("../ai/aiConnector");
@@ -9,6 +9,20 @@ function resolveProviderFn(mode = "triage") {
   const model = modelParts.join("/");
 
   if (provider === "mock") {
+    if (mode === "doctor_assist") {
+      return async () => ({
+        rawText: JSON.stringify({
+          clinical_summary: "این یک خلاصه‌ی نمونه (mock) برای تست است.",
+          differential_interpretation: [
+            { possibility: "نمونه‌ی تشخیص افتراقی (mock)", rationale: "دلیل نمونه" },
+          ],
+          suggested_management: ["پیشنهاد نمونه‌ی اقدام (mock)"],
+          urgent_flag: false,
+          urgent_flag_reason: "",
+        }),
+        meta: { provider: "mock", model: "mock-v1" },
+      });
+    }
     if (mode === "questions") {
       return async () => ({
         rawText: JSON.stringify({
@@ -238,4 +252,4 @@ async function generateSecondRoundQuestions({
   }
 }
 
-module.exports = { runAiTriageAnalysis, toAiPatientResponses, getPresentingProblems, generateQuestions, generateSecondRoundQuestions };
+module.exports = { runAiTriageAnalysis, toAiPatientResponses, getPresentingProblems, generateQuestions, generateSecondRoundQuestions, resolveProviderFn };

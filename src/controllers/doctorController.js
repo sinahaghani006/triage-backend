@@ -81,4 +81,86 @@ async function getPatientDetail(req, res, next) {
   }
 }
 
-module.exports = { listPatients, getPatientDetail };
+const { generateDoctorAssistPrompt } = require("../ai/doctorPromptGenerator");
+const { callAIProvider } = require("../ai/aiConnector");
+const { resolveProviderFn } = require("../services/aiTriageGateway");
+
+// POST /doctor/patients/:id/ai-assistant
+// Builds a decision-support prompt from the patient's CURRENT triage
+// session (most recent Session with a TriageResult), sends it to the AI
+// layer via generateDoctorAssistPrompt (sanitizes free-text PII), and
+// returns the 3-part structured suggestion for doctor review.
+// ASSUMPTION (flagged for PM): raw otherSymptomsText is not persisted
+// anywhere independently yet (same gap as the open initialDescription
+// investigation) -- passed as undefined until that's resolved.
+async function getAiAssistant(req, res, next) {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true },
+    });
+    if (!user || user.role !== "patient") {
+      throw new AppError("Patient not found", 404, "PATIENT_NOT_FOUND");
+    }
+
+    const latestSession = await prisma.session.findFirst({
+      where: { userId: id },
+      orderBy: { createdAt: "desc" },
+      include: { triageResult: true },
+    });
+
+    if (!latestSession || !latestSession.triageResult) {
+      throw new AppError(
+        "No completed triage session found for this patient yet",
+        404,
+        "NO_TRIAGE_SESSION"
+      );
+    }
+
+    const patientDetails = await prisma.patientDetails.findUnique({ where: { userId: id } });
+    const medicalHistory = await prisma.medicalHistory.findUnique({ where: { userId: id } });
+
+    const triageJson = latestSession.triageResult.triageResultJson || {};
+    const questionsAsked = triageJson.questions_asked || [];
+    const patientResponses = triageJson.patient_responses || [];
+
+    const prompt = generateDoctorAssistPrompt({
+      patientAnonymizedId: `بیمار #${id.slice(0, 8)}`,
+      age: patientDetails?.age ?? 0,
+      sex: patientDetails?.gender === "female" ? "female" : "male",
+      weightKg: patientDetails?.weightKg,
+      heightCm: patientDetails?.heightCm,
+      presentingProblemId: latestSession.presentingProblemId,
+      otherSymptomsText: undefined,
+      questionsAsked,
+      patientResponses,
+      medicalHistory: medicalHistory || undefined,
+    });
+
+    const providerFn = resolveProviderFn("doctor_assist");
+    const { rawText } = await callAIProvider(prompt, providerFn);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch (err) {
+      throw new AppError("AI response was not valid JSON", 502, "AI_RESPONSE_INVALID");
+    }
+
+    if (
+      typeof parsed.clinical_summary !== "string" ||
+      !Array.isArray(parsed.differential_interpretation) ||
+      !Array.isArray(parsed.suggested_management) ||
+      typeof parsed.urgent_flag !== "boolean"
+    ) {
+      throw new AppError("AI response did not match the expected 3-part shape", 502, "AI_RESPONSE_INVALID");
+    }
+
+    return res.status(200).json(parsed);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { listPatients, getPatientDetail, getAiAssistant };
