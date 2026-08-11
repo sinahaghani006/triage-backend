@@ -93,7 +93,7 @@ async function generateSessionQuestions(req, res, next) {
       );
     }
 
-    const { presentingProblemId, patientDetails } = req.body;
+    const { presentingProblemId, patientDetails, initialDescription } = req.body;
 
     // Diagnostic audit log (added 2026-08-04): records every generate-questions
     // call's presentingProblemId regardless of success/failure, so a future
@@ -122,7 +122,7 @@ async function generateSessionQuestions(req, res, next) {
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
 
-    const result = await generateQuestions({ presentingProblemId, age, patientDetails, patientHistory, medicalHistory: medicalHistoryRecord });
+    const result = await generateQuestions({ presentingProblemId, initialDescription, age, patientDetails, patientHistory, medicalHistory: medicalHistoryRecord });
 
     return res.status(200).json({ questions: result.questions });
   } catch (err) {

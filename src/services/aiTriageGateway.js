@@ -135,7 +135,7 @@ function getPresentingProblems() {
 // in src/ai/index.js already destructures patientHistory and medicalHistory as
 // top-level params, so passing them as siblings is correct for THIS function.
 // Only added medicalHistory (was previously missing entirely).
-async function generateQuestions({ presentingProblemId, age, patientDetails = {}, patientHistory, medicalHistory }) {
+async function generateQuestions({ presentingProblemId, initialDescription, age, patientDetails = {}, patientHistory, medicalHistory }) {
   let aiModule;
   try {
     aiModule = require("../ai");
@@ -152,6 +152,7 @@ async function generateQuestions({ presentingProblemId, age, patientDetails = {}
   try {
     return await aiModule.generateTriageQuestions({
       presentingProblemId,
+      initialDescription,
       age,
       sex: patientDetails.gender,
       weightKg: patientDetails.weightKg ?? patientDetails.weight,
