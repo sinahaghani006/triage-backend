@@ -216,16 +216,35 @@ async function submitSymptoms(req, res, next) {
       data: { currentState: 'S4_ai_triage_processing', presentingProblemId },
     });
 
-    const { urgencyLevel, triageResultJson } = await runAiTriageAnalysis({
-      sessionId,
-      patientResponses: {
-        presentingProblemId,
-        patientDetails: { ...patientDetails, age },
-        answers,
-      },
-      patientHistory,
-      medicalHistory: medicalHistoryRecord,
-    });
+    let urgencyLevel, triageResultJson;
+    try {
+      ({ urgencyLevel, triageResultJson } = await runAiTriageAnalysis({
+        sessionId,
+        patientResponses: {
+          presentingProblemId,
+          patientDetails: { ...patientDetails, age },
+          answers,
+        },
+        patientHistory,
+        medicalHistory: medicalHistoryRecord,
+      }));
+    } catch (aiErr) {
+      // 2026-08-10 fix: previously, any throw here left the session stuck
+      // forever in S4_ai_triage_processing (no transition back to S2 exists
+      // in sessionStateMachine.js -- only cancel_session works from S4).
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { currentState: 'S2_collecting_information' },
+      });
+      recordAudit({
+        userId: req.user.id,
+        action: 'session_rolled_back_to_s2',
+        entityType: 'Session',
+        entityId: sessionId,
+        metadata: { reason: aiErr.message },
+      });
+      throw aiErr;
+    }
 
     const resolvedState = resolveStateForUrgency(urgencyLevel);
     if (!resolvedState) {

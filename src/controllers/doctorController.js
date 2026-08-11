@@ -1,4 +1,4 @@
-const prisma = require("../config/prismaClient");
+﻿const prisma = require("../config/prismaClient");
 const AppError = require("../utils/AppError");
 const { getRecentHistorySummary } = require("../services/patientHistoryService");
 
@@ -84,6 +84,7 @@ async function getPatientDetail(req, res, next) {
 const { generateDoctorAssistPrompt } = require("../ai/doctorPromptGenerator");
 const { callAIProvider } = require("../ai/aiConnector");
 const { resolveProviderFn } = require("../services/aiTriageGateway");
+const { sanitizeDoctorAssistOutput, flagUnverifiedClinicalClaims } = require("../ai/doctorResponseValidator");
 
 // POST /doctor/patients/:id/ai-assistant
 // Builds a decision-support prompt from the patient's CURRENT triage
@@ -157,7 +158,12 @@ async function getAiAssistant(req, res, next) {
       throw new AppError("AI response did not match the expected 3-part shape", 502, "AI_RESPONSE_INVALID");
     }
 
-    return res.status(200).json(parsed);
+    // 2026-08-10: sanitize foreign-language artifacts and flag unverified
+    // clinical claims before showing the doctor anything.
+    const cleaned = sanitizeDoctorAssistOutput(parsed);
+    const warnings = flagUnverifiedClinicalClaims(cleaned, medicalHistory);
+
+    return res.status(200).json({ ...cleaned, warnings });
   } catch (err) {
     return next(err);
   }
