@@ -124,7 +124,7 @@ async function generateSessionQuestions(req, res, next) {
 
     const result = await generateQuestions({ presentingProblemId, initialDescription, age, patientDetails, patientHistory, medicalHistory: medicalHistoryRecord });
 
-    return res.status(200).json({ questions: result.questions });
+    return res.status(200).json({ questions: result.questions, inferred_clinical_domain: result.inferred_clinical_domain });
   } catch (err) {
     return next(err);
   }

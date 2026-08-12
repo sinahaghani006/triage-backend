@@ -1,4 +1,4 @@
-/**
+﻿/**
  * schemas.js
  *
  * *** طراحی جدید — به دستور صریح مدیر پروژه (سینا)، تاریخ تأیید: همین گفتگو. ***
@@ -22,29 +22,6 @@ const { z } = require('zod');
 // ترتیب فوریت — طبق قانون escalate-only پروژه: normal < home_care < doctor_review < emergency
 const URGENCY_LEVELS = ['normal', 'home_care', 'doctor_review', 'emergency'];
 
-/**
- * PatientContextSchema — ورودی که به AI ارسال می‌شود.
- * قانون حیاتی پروژه: هیچ داده هویتی (نام، کد ملی، آدرس) نباید اینجا باشد.
- * فقط داده بالینی: شکایت، سن، جنس، وزن (اختیاری)، قد (اختیاری).
- *
- * heightCm اختیاری است — طبق مشاهده‌ی migration جدید Backend
- * (add_height_cm) که هنوز رسماً به این ماژول اعلام نشده بود؛ برای
- * سازگاری با نسخه‌های قبلی Backend که این فیلد را ارسال نمی‌کنند.
- *
- * weightKg هم اختیاری است — تأییدشده با شواهد واقعی prisma schema
- * (weightKg Float? @map("weight_kg"))؛ کاربرانی که هنوز مرحله‌ی ثبت
- * جزئیات پزشکی را کامل نکرده‌اند ممکن است وزن ثبت‌شده نداشته باشند.
- */
-/**
- * MedicalHistorySchema — Task «اتصال Medical History»، تأیید مدیر پروژه
- * در همین گفتگو.
- *
- * قرارداد واقعی Backend (GET /users/me/medical-history، تأییدشده با شواهد
- * خام از medicalHistoryValidators.js): پنج فیلد آرایه‌ای از متن آزاد،
- * بدون اعتبارسنجی محتوایی. این schema فقط شکل داده (آرایه‌ای از رشته) را
- * چک می‌کند — پاک‌سازی محتوایی (حذف شماره تلفن/کدملی/ایمیل) وظیفه‌ی
- * medicalHistorySanitizer.js است، نه این schema.
- */
 const MedicalHistorySchema = z
   .object({
     chronicConditions: z.array(z.string()).default([]),
@@ -66,19 +43,6 @@ const PatientContextSchema = z.object({
   medicalHistory: MedicalHistorySchema,
 });
 
-/**
- * AIRawResponseSchema — پاسخ خام مورد انتظار از AI provider، قبل از هر پردازش.
- * این schema باید دقیقاً با چیزی که در promptGenerator.js از AI خواسته می‌شود
- * مطابقت داشته باشد.
- *
- * *** به‌روزرسانی — به دستور صریح مدیر پروژه: ***
- * recommendations حالا بخشی از قرارداد خروجی AI است. مرز محتوایی سخت
- * (بدون نام دارو، بدون دوز، بدون تشخیص قطعی) در SYSTEM_INSTRUCTIONS
- * (promptGenerator.js) به‌عنوان یک قانون سخت درج شده، و علاوه بر آن یک
- * لایه‌ی دفاعی کد (sanitizeRecommendations در responseValidator.js) هر
- * موردی که با این مرز مطابقت نداشته باشد را حذف می‌کند — یعنی این مرز
- * فقط به قول مدل متکی نیست.
- */
 const AIRawResponseSchema = z.object({
   urgency_suggestion: z.enum(URGENCY_LEVELS),
   confidence: z.number().min(0).max(1),
@@ -88,11 +52,6 @@ const AIRawResponseSchema = z.object({
   is_complete: z.boolean(),
 });
 
-/**
- * TriageResultSchema — خروجی نهایی این ماژول که به Backend تحویل داده می‌شود.
- * urgency_level اینجا سطح نهایی بعد از اعمال قوانین محافظه‌کارانه است، نه
- * urgency_suggestion خام AI.
- */
 const TriageResultSchema = z.object({
   session_id: z.string().min(1),
   presenting_problem_id: z.string().min(1),
@@ -100,7 +59,7 @@ const TriageResultSchema = z.object({
   confidence: z.number().min(0).max(1),
   reasoning: z.string(),
   clinical_alerts: z.array(z.string()),
-  recommendations: z.array(z.string()), // برای normal/home_care/emergency از AI (پس از پاکسازی)؛ برای doctor_review همیشه خالی
+  recommendations: z.array(z.string()),
   questions_asked: z.array(z.string()),
   patient_responses: z.array(z.string()),
   generated_at: z.string(),
@@ -111,61 +70,50 @@ const TriageResultSchema = z.object({
   }),
 });
 
-/**
- * TriageQuestionSchema / TriageQuestionsRawSchema
- *
- * *** قابلیت جدید — به دستور صریح مدیر پروژه، برای مدل سؤال‌محور پویا. ***
- * مرجع: نمونه‌ی هاردکد خود مدیرعامل سینا در بریف اولیه («سه سوال از وی
- * بپرس... در قالب جیسان»). این schema پاسخ خام AI را برای مرحله‌ی تولید
- * سؤال (قبل از submit-symptoms نهایی) اعتبارسنجی می‌کند — کاملاً جدا از
- * AIRawResponseSchema که برای مرحله‌ی تشخیص نهایی urgency است.
- *
- * تعداد گزینه‌ها (۲ تا ۴) در schema چک می‌شود؛ تعداد دقیق سؤالات (همیشه ۵)
- * چون این شبیه‌ساز zod از .length() پشتیبانی نمی‌کند، در aiTriageService.js
- * به‌صورت جداگانه و صریح چک و در صورت نقض خطا پرتاب می‌شود.
- */
 const TriageQuestionSchema = z.object({
   questionText: z.string().min(1),
   options: z.array(z.string().min(1)).min(2).max(4),
 });
 
+/**
+ * *** به‌روزرسانی — تأیید مدیر پروژه/مدیرعامل (این گفتگو)، بر اساس evidence
+ * واقعی: باگ سؤالات عمومی برای «سایر علائم». ***
+ *
+ * *** چرا این فیلد اضافه شد: *** برای متن آزاد کاملاً قابل‌تفسیر (مثل
+ * «دو هفته‌ست دست چپم بی‌حس می‌شه»)، مدل با وجود دستورالعمل صریح در
+ * QUESTIONS_SYSTEM_INSTRUCTIONS، سه بار پشت‌سرهم (۲ بار قبل + ۱ بار بعد
+ * از اضافه‌کردن یک مثال concrete در پرامپت) سؤالات کاملاً عمومی و
+ * بی‌ربط تولید کرد — یعنی صرفاً توضیح بهتر در پرامپت کافی نبود.
+ *
+ * *** طراحی: اجبار commitment صریح، نه فقط توضیح ضمنی. *** به‌جای
+ * امیدواری به اینکه مدل وسط یک پاراگراف طولانی دستورالعمل، تصمیم
+ * «قابل‌تفسیر یا نه» را درست بگیرد، این فیلد مدل را مجبور می‌کند قبل
+ * از نوشتن سؤالات، یک تصمیم صریح و جداگانه (نام حوزه‌ی بالینی، یا
+ * دقیقاً «نامشخص» اگر واقعاً غیرقابل‌تفسیر بود) ثبت کند — مشابه یک
+ * chain-of-thought اجباری در سطح schema، نه اختیاری در سطح متن.
+ *
+ * این فیلد برای همه‌ی presentingProblemId ها (نه فقط other_symptoms)
+ * الزامی است تا ساختار schema یکنواخت بماند؛ برای دسته‌های از پیش‌
+ * تعریف‌شده، حوزه‌ی بالینی معمولاً از خودِ نام دسته مشخص است، پس این
+ * فیلد برایشان هزینه‌ی اضافه‌ای ندارد.
+ *
+ * *** این schema فعلاً هیچ محدودیتی روی مقدار این فیلد اعمال نمی‌کند
+ * (فقط رشته‌ی غیرخالی) — اعتبارسنجی محتوایی (مثلاً اینکه آیا واقعاً
+ * با سؤالات هم‌خوان است) خارج از دامنه‌ی zod schema است و نیاز به
+ * evidence بیشتر دارد پیش از افزودن. ***
+ */
 const TriageQuestionsRawSchema = z.object({
+  inferred_clinical_domain: z.string().min(1),
   questions: z.array(TriageQuestionSchema),
 });
 
-/**
- * *** قابلیت جدید — جریان پرسش دومرحله‌ای، تأیید مدیر پروژه در همین گفتگو. ***
- *
- * طرح: ۵ سؤال دور اول → پاسخ کاربر → این مرحله (دور دوم) → یا (الف) ۵
- * سؤال دور دوم عمیق‌تر، یا (ب) تصمیم نهایی زودهنگام اگر دور اول سیگنال
- * فوریت واضح داده باشد.
- *
- * *** قانون escalate-only در این چک‌پوینت — حیاتی: ***
- * ESCALATE_ONLY_URGENCY_LEVELS عمداً فقط شامل doctor_review و emergency
- * است. این چک‌پوینت هرگز اجازه ندارد به‌جای دور دوم، تصمیم normal یا
- * home_care بگیرد — چون کل هدف دور دوم، دقت بیشتر برای موارد کم‌فوریت
- * است؛ فقط ایمنی (سیگنال فوریت واضح) توجیه‌کننده‌ی رد شدن از این دقت
- * است، نه هیچ چیز دیگر. این مرز در سطح schema (نه فقط در پرامپت) بسته
- * شده تا فقط به قول مدل متکی نباشد.
- */
 const ESCALATE_ONLY_URGENCY_LEVELS = ['doctor_review', 'emergency'];
 
-/**
- * SecondRoundQuestionsSchema — حالت escalate:false. دقیقاً همان ساختار
- * ۵ سؤال دور اول (TriageQuestionSchema)، بدون تغییر شکل.
- */
 const SecondRoundQuestionsSchema = z.object({
   escalate: z.boolean(),
   questions: z.array(TriageQuestionSchema).default([]),
 });
 
-/**
- * SecondRoundEscalationSchema — حالت escalate:true. دقیقاً همان فیلدهای
- * AIRawResponseSchema (تصمیم نهایی) با یک محدودیت اضافه: urgency_suggestion
- * فقط می‌تواند doctor_review یا emergency باشد، نه normal/home_care.
- * این هم‌شکلی عمدی است — یعنی خروجی این حالت مستقیماً (بدون تبدیل) به
- * buildTriageResultFromAI در urgencyClassifier.js قابل‌پاس‌دادن است.
- */
 const SecondRoundEscalationSchema = z.object({
   escalate: z.boolean(),
   urgency_suggestion: z.enum(ESCALATE_ONLY_URGENCY_LEVELS),
@@ -188,3 +136,4 @@ module.exports = {
   SecondRoundQuestionsSchema,
   SecondRoundEscalationSchema,
 };
+
