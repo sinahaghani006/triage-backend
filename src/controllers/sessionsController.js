@@ -268,7 +268,7 @@ async function submitSymptoms(req, res, next) {
       }),
       prisma.session.update({
         where: { id: sessionId },
-        data: { currentState: finalState },
+        data: { currentState: finalState, doctorReviewStatus: 'ai_completed' },
         include: { triageResult: true },
       }),
     ]);
@@ -555,7 +555,7 @@ async function secondRoundQuestions(req, res, next) {
         }),
         prisma.session.update({
           where: { id: sessionId },
-          data: { currentState: finalState, presentingProblemId },
+          data: { currentState: finalState, presentingProblemId, doctorReviewStatus: 'ai_completed' },
           include: { triageResult: true },
         }),
       ]);
