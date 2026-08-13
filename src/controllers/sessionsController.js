@@ -518,6 +518,30 @@ async function secondRoundQuestions(req, res, next) {
       throw new AppError('Patient birthDate must be a valid date (e.g. 2000-05-15)', 400, 'BIRTHDATE_INVALID_FORMAT');
     }
     const age = calculateAge(patientDetails.birthDate);
+
+    // 2026-08-13 fix: this path (round-2 escalate) never persisted patientDetails,
+    // unlike submitSymptoms -- sessions completing via second-round escalation ended up
+    // with no patientDetails row at all, causing downstream consumers (e.g. doctor
+    // AI-assistant) to silently fall back to age=0. Mirrors submitSymptoms's upsert logic.
+    const submittedWeight = patientDetails?.weightKg ?? patientDetails?.weight;
+    const submittedHeight = patientDetails?.heightCm ?? patientDetails?.height;
+    const submittedGender = patientDetails?.gender;
+    const patientUpdateData = { age, birthDate: new Date(patientDetails.birthDate) };
+    if (submittedWeight !== undefined && submittedWeight !== null) {
+      patientUpdateData.weightKg = submittedWeight;
+    }
+    if (submittedHeight !== undefined && submittedHeight !== null) {
+      patientUpdateData.heightCm = submittedHeight;
+    }
+    if (submittedGender !== undefined && submittedGender !== null) {
+      patientUpdateData.gender = submittedGender;
+    }
+    await prisma.patientDetails.upsert({
+      where: { userId: req.user.id },
+      create: { userId: req.user.id, ...patientUpdateData },
+      update: patientUpdateData,
+    });
+
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
 
