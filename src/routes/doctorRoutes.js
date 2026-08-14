@@ -11,5 +11,6 @@ router.use(requireRole("doctor", "admin"));
 router.get("/patients", doctorController.listPatients);
 router.get("/patients/:id", doctorController.getPatientDetail);
 router.post("/patients/:id/ai-assistant", doctorController.getAiAssistant);
+router.patch("/patients/:id/review-status", doctorController.updateReviewStatus);
 
 module.exports = router;

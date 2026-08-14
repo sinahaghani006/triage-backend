@@ -1,6 +1,7 @@
 ﻿const prisma = require("../config/prismaClient");
 const AppError = require("../utils/AppError");
 const { getRecentHistorySummary } = require("../services/patientHistoryService");
+const { recordAudit } = require("../services/auditLogService");
 
 // GET /doctor/patients
 // Minimal Phase-1 listing (2026-08-08). One row per patient user, showing
@@ -54,10 +55,11 @@ async function getPatientDetail(req, res, next) {
     if (!user || user.role !== "patient") {
       throw new AppError("Patient not found", 404, "PATIENT_NOT_FOUND");
     }
-    const [patientDetails, medicalHistory, triageHistory] = await Promise.all([
+    const [patientDetails, medicalHistory, triageHistory, latestSessionForStatus] = await Promise.all([
       prisma.patientDetails.findUnique({ where: { userId: id } }),
       prisma.medicalHistory.findUnique({ where: { userId: id } }),
       getRecentHistorySummary(id, 20),
+      prisma.session.findFirst({ where: { userId: id }, orderBy: { createdAt: "desc" } }),
     ]);
 
     return res.status(200).json({
@@ -73,6 +75,8 @@ async function getPatientDetail(req, res, next) {
         heightCm: patientDetails?.heightCm ?? null,
         gender: patientDetails?.gender ?? null,
         medicalHistory: medicalHistory || null,
+        doctorReviewStatus: latestSessionForStatus?.doctorReviewStatus ?? null,
+        sessionId: latestSessionForStatus?.id ?? null,
       },
       triageHistory,
     });
@@ -169,4 +173,63 @@ async function getAiAssistant(req, res, next) {
   }
 }
 
-module.exports = { listPatients, getPatientDetail, getAiAssistant };
+const VALID_MANUAL_REVIEW_STATUSES = ["visited_inperson", "appointment_scheduled", "closed_no_action"];
+
+// PATCH /doctor/patients/:id/review-status
+// Lets a doctor manually set the final disposition of a patient's latest
+// session after reviewing it. Only the three terminal DoctorReviewStatus
+// values are settable here -- unfinished/ai_completed/doctor_message_sent
+// are set by the system elsewhere in the flow, never manually.
+async function updateReviewStatus(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { doctorReviewStatus } = req.body;
+
+    if (!VALID_MANUAL_REVIEW_STATUSES.includes(doctorReviewStatus)) {
+      throw new AppError(
+        `doctorReviewStatus must be one of: ${VALID_MANUAL_REVIEW_STATUSES.join(", ")}`,
+        400,
+        "VALIDATION_ERROR"
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true },
+    });
+    if (!user || user.role !== "patient") {
+      throw new AppError("Patient not found", 404, "PATIENT_NOT_FOUND");
+    }
+
+    const latestSession = await prisma.session.findFirst({
+      where: { userId: id },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!latestSession) {
+      throw new AppError("No triage session found for this patient yet", 404, "NO_TRIAGE_SESSION");
+    }
+
+    const updated = await prisma.session.update({
+      where: { id: latestSession.id },
+      data: { doctorReviewStatus },
+    });
+
+    recordAudit({
+      userId: req.user.id,
+      action: "doctor_review_status_changed",
+      entityType: "Session",
+      entityId: latestSession.id,
+      metadata: { from: latestSession.doctorReviewStatus, to: doctorReviewStatus },
+    });
+
+    return res.status(200).json({
+      patientId: id,
+      sessionId: updated.id,
+      doctorReviewStatus: updated.doctorReviewStatus,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { listPatients, getPatientDetail, getAiAssistant, updateReviewStatus };
