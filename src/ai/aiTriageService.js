@@ -100,10 +100,30 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
     }
   } catch (err) {
     // قانون طلایی #۳: هر خطای AI/provider/validation => doctor_review، هرگز چیز دیگر.
-    const reason =
-      err instanceof AIConnectorError || err instanceof ResponseValidationError
-        ? err.message
-        : `خطای غیرمنتظره: ${err.message}`;
+    // 🔒 فیکس (این گفتگو): هرگز err.message خام (که می‌تواند شامل پاسخ خام provider
+    // باشد، مثل خطای HTTP کامل Groq) به بیمار در فیلد reasoning نمایش داده نشود.
+    // فقط دسته‌بندی امن و عمومی؛ جزئیات خام صرفاً در لاگ سرور.
+    const SAFE_REASON_MAP = {
+      TIMEOUT: 'ارتباط با سرویس هوش مصنوعی با تأخیر مواجه شد.',
+      INVALID_PROVIDER_RESPONSE: 'پاسخ دریافتی از سرویس هوش مصنوعی معتبر نبود.',
+      PROVIDER_CALL_FAILED: 'در حال حاضر امکان ارتباط با سرویس هوش مصنوعی نیست.',
+      INVALID_PROMPT_SHAPE: 'خطای داخلی در آماده‌سازی درخواست.',
+      INVALID_PROMPT_SYSTEM: 'خطای داخلی در آماده‌سازی درخواست.',
+      INVALID_PROMPT_USER: 'خطای داخلی در آماده‌سازی درخواست.',
+      INVALID_PROVIDER_FN: 'خطای داخلی در پیکربندی سرویس هوش مصنوعی.',
+    };
+
+    let reason;
+    if (err instanceof AIConnectorError) {
+      reason = SAFE_REASON_MAP[err.code] || 'خطای ارتباطی با سرویس هوش مصنوعی.';
+      console.error(`[AI_TRIAGE_FALLBACK] sessionId=${sessionId} code=${err.code} raw=${err.message}`);
+    } else if (err instanceof ResponseValidationError) {
+      reason = 'ساختار پاسخ سیستم هوش مصنوعی نامعتبر بود.';
+      console.error(`[AI_TRIAGE_FALLBACK] sessionId=${sessionId} code=${err.code} raw=${err.message}`);
+    } else {
+      reason = 'خطای غیرمنتظره‌ی داخلی.';
+      console.error(`[AI_TRIAGE_FALLBACK] sessionId=${sessionId} unexpected raw=${err.message}`);
+    }
 
     triageResult = buildFallbackTriageResult({
       sessionId,
