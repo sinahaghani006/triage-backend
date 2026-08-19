@@ -1,4 +1,4 @@
-/**
+﻿/**
  * promptGenerator.js
  *
  * *** طراحی جدید — به دستور صریح مدیر پروژه (سینا). بازسازی نیست. ***
@@ -633,7 +633,7 @@ function generateQuestionsPrompt({
 
   const userContent = `
 ${narrativeIntro}
-توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}
+${presentingProblemId === 'other_symptoms' ? '' : `توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}`}
 
 ${medicalHistoryText}
 
