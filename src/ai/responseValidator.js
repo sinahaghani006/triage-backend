@@ -124,8 +124,24 @@ function validateAIResponse(rawText) {
  */
 const FOREIGN_LANGUAGE_ARTIFACT_PATTERN = /[À-ÿ\u1E00-\u1EFF\u0400-\u04FFa-zA-Z\u4E00-\u9FFF]/;
 
+/**
+ * *** whitelist محدود — TASK 4، تأیید مدیر پروژه (این گفتگو)، بر اساس
+ * شواهد واقعی (کلمه‌ی محرک "۳۸°C" در error_logs، sessionId d36e6324،
+ * مسیر /generate-questions، 2026-08-19). عمداً محدود به دما (°C/°F) —
+ * تنها الگویی که واقعاً در production دیده شده، نه پیش‌بینی. اگر واحد
+ * دیگری (mg، mmHg و...) بعداً با شواهد واقعی مشابه دیده شد، باید جدا
+ * اضافه شود — نه از قبل حدسی گسترش داده شود.
+ * anchor کامل (^...$) عمداً است: باید کل کلمه دقیقاً همین شکل باشد، نه
+ * صرفاً شامل این substring — کلمه‌ای مثل "Contact" هرگز match نمی‌شود.
+ */
+const WHITELISTED_MEASUREMENT_TOKEN_PATTERN = /^[\d۰-۹]*\s?°?(?:C|F)$/i;
+
 function containsForeignLanguageArtifact(text) {
-  return typeof text === 'string' && FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(text);
+  if (typeof text !== 'string') return false;
+  return text
+    .split(/\s+/)
+    .filter(Boolean)
+    .some((word) => FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word) && !WHITELISTED_MEASUREMENT_TOKEN_PATTERN.test(word));
 }
 
 /**
@@ -138,7 +154,9 @@ function containsForeignLanguageArtifact(text) {
 function findForeignLanguageArtifactMatch(text) {
   if (typeof text !== 'string') return null;
   const words = text.split(/\s+/);
-  const match = words.find((word) => FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word));
+  const match = words.find(
+    (word) => FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word) && !WHITELISTED_MEASUREMENT_TOKEN_PATTERN.test(word)
+  );
   return match || null;
 }
 
@@ -146,7 +164,7 @@ function stripForeignLanguageArtifacts(text) {
   if (typeof text !== 'string') return text;
   const cleaned = text
     .split(/\s+/)
-    .filter((word) => !FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word))
+    .filter((word) => !FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word) || WHITELISTED_MEASUREMENT_TOKEN_PATTERN.test(word))
     .join(' ')
     .replace(/\s+([.,،؛])/g, '$1')
     .trim();
@@ -172,7 +190,9 @@ function sanitizeIfSalvageable(text) {
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length === 0) return null;
 
-  const cleanedWords = words.filter((word) => !FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word));
+  const cleanedWords = words.filter(
+    (word) => !FOREIGN_LANGUAGE_ARTIFACT_PATTERN.test(word) || WHITELISTED_MEASUREMENT_TOKEN_PATTERN.test(word)
+  );
   const removedRatio = (words.length - cleanedWords.length) / words.length;
 
   if (removedRatio > MAX_REMOVED_WORD_RATIO || cleanedWords.length === 0) {
