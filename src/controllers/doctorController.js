@@ -1,7 +1,22 @@
-﻿const prisma = require("../config/prismaClient");
+const prisma = require("../config/prismaClient");
 const AppError = require("../utils/AppError");
 const { getRecentHistorySummary } = require("../services/patientHistoryService");
 const { recordAudit } = require("../services/auditLogService");
+const crypto = require("crypto");
+
+// 2026-08-19 fix: id.slice(0,8) قبلاً بخش خام و قابل‌تطبیق id واقعی کاربر
+// را مستقیم به Groq (سرویس خارجی) می‌فرستاد -- نقض قانون حریم خصوصی پروژه.
+// این تابع یک hash کوتاه و غیرقابل‌برگشت تولید می‌کند که هیچ رابطه‌ی
+// قابل‌استخراجی با id واقعی ندارد. عمداً throw می‌کند اگر salt تنظیم
+// نشده باشد -- نباید بی‌صدا fallback به یک مقدار ضعیف بزند.
+function getAnonymizedPatientId(userId) {
+  const salt = process.env.ANONYMIZATION_SALT;
+  if (!salt) {
+    throw new Error("ANONYMIZATION_SALT env var is not set");
+  }
+  const hash = crypto.createHash("sha256").update(`${salt}:${userId}`).digest("hex");
+  return `بیمار #${hash.slice(0, 8)}`;
+}
 
 // GET /doctor/patients
 // Minimal Phase-1 listing (2026-08-08). One row per patient user, showing
@@ -131,7 +146,7 @@ async function getAiAssistant(req, res, next) {
     const patientResponses = triageJson.patient_responses || [];
 
     const prompt = generateDoctorAssistPrompt({
-      patientAnonymizedId: `بیمار #${id.slice(0, 8)}`,
+      patientAnonymizedId: getAnonymizedPatientId(id),
       age: patientDetails?.age ?? 0,
       sex: patientDetails?.gender === "female" ? "female" : "male",
       weightKg: patientDetails?.weightKg,
