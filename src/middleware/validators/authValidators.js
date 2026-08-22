@@ -1,4 +1,4 @@
-﻿const { body } = require('express-validator');
+const { body } = require('express-validator');
 
 const registerValidator = [
   body('name')
@@ -9,6 +9,10 @@ const registerValidator = [
     .trim()
     .notEmpty().withMessage('nationalId is required')
     .matches(/^\d{10}$/).withMessage('nationalId must be a 10-digit number'),
+  body('phoneNumber')
+    .trim()
+    .notEmpty().withMessage('phoneNumber is required')
+    .matches(/^09\d{9}$/).withMessage('phoneNumber must be a valid Iranian mobile number (e.g. 09123456789)'),
   body('email')
     .trim()
     .notEmpty().withMessage('email is required')
