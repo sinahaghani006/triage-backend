@@ -20,6 +20,7 @@ function toPublicUser(user) {
     id: user.id,
     name: user.name,
     nationalId: user.nationalId,
+    phoneNumber: user.phoneNumber,
     email: user.email,
     role: user.role,
     createdAt: user.createdAt,
@@ -45,18 +46,23 @@ function setAuthCookie(res, token) {
 // created for every new user with the default starting balance.
 async function register(req, res, next) {
   try {
-    const { name, nationalId, email, password } = req.body;
+    const { name, nationalId, phoneNumber, email, password } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       throw new AppError('An account with this email already exists', 409, 'EMAIL_TAKEN');
     }
 
-    if (nationalId) {
-      const existingNationalId = await prisma.user.findUnique({ where: { nationalId } });
-      if (existingNationalId) {
-        throw new AppError('An account with this national ID already exists', 409, 'NATIONAL_ID_TAKEN');
-      }
+    if (!nationalId) {
+      throw new AppError('nationalId is required', 400, 'NATIONAL_ID_REQUIRED');
+    }
+    if (!phoneNumber) {
+      throw new AppError('phoneNumber is required', 400, 'PHONE_NUMBER_REQUIRED');
+    }
+
+    const existingNationalId = await prisma.user.findUnique({ where: { nationalId } });
+    if (existingNationalId) {
+      throw new AppError('An account with this national ID already exists', 409, 'NATIONAL_ID_TAKEN');
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -64,6 +70,7 @@ async function register(req, res, next) {
       data: {
         name,
         nationalId,
+        phoneNumber,
         email,
         passwordHash,
         wallet: { create: {} },
