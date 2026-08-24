@@ -7,6 +7,7 @@ const {
   sessionIdParamValidator,
   createSessionValidator,
   submitSymptomsValidator,
+  secondRoundQuestionsValidator,
 } = require('../middleware/validators/sessionValidators');
 const { feedbackValidator } = require('../middleware/validators/feedbackValidators');
 const router = express.Router();
@@ -22,7 +23,7 @@ router.post(
 );
 router.post(
   '/:id/second-round-questions',
-  sessionIdParamValidator,
+  secondRoundQuestionsValidator,
   validateRequest,
   sessionsController.secondRoundQuestions,
 );
