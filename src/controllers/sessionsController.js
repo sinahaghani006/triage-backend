@@ -1,4 +1,4 @@
-﻿const prisma = require('../config/prismaClient');
+const prisma = require('../config/prismaClient');
 const AppError = require('../utils/AppError');
 const { canTransition, resolveStateForUrgency, AUTO_FINALIZE_STATES } = require('../utils/sessionStateMachine');
 const { runAiTriageAnalysis } = require('../services/aiTriageGateway');
@@ -122,9 +122,66 @@ async function generateSessionQuestions(req, res, next) {
     const patientHistory = await getRecentHistorySummary(req.user.id, 5);
     const medicalHistoryRecord = await prisma.medicalHistory.findUnique({ where: { userId: req.user.id } });
 
-    const result = await generateQuestions({ presentingProblemId, initialDescription, age, patientDetails, patientHistory, medicalHistory: medicalHistoryRecord });
+    const result = await generateQuestions({ sessionId, presentingProblemId, initialDescription, age, patientDetails, patientHistory, medicalHistory: medicalHistoryRecord });
 
-    return res.status(200).json({ questions: result.questions });
+    if (result.escalate === true) {
+      const { urgencyLevel, triageResultJson } = result;
+      const resolvedState = resolveStateForUrgency(urgencyLevel);
+      if (!resolvedState) {
+        throw new AppError(
+          `AI module returned an unrecognized urgencyLevel: ${urgencyLevel}`,
+          502,
+          'AI_RESPONSE_INVALID',
+        );
+      }
+
+      const isAutoFinalized = AUTO_FINALIZE_STATES.has(resolvedState);
+      const finalState = isAutoFinalized ? 'S9_completed_triage' : resolvedState;
+
+      const [, updatedSession] = await prisma.$transaction([
+        prisma.triageResult.create({
+          data: { sessionId, urgencyLevel, triageResultJson },
+        }),
+        prisma.session.update({
+          where: { id: sessionId },
+          data: { currentState: finalState, presentingProblemId, doctorReviewStatus: 'ai_completed' },
+          include: { triageResult: true },
+        }),
+      ]);
+
+      recordAudit({
+        userId: req.user.id,
+        action: 'session_state_transition',
+        entityType: 'Session',
+        entityId: sessionId,
+        metadata: { from: 'S2_collecting_information', to: finalState, urgencyLevel, autoFinalized: isAutoFinalized, source: 'generate_questions' },
+      });
+
+      if (isAutoFinalized) {
+        try {
+          await deductForCompletedTriage(req.user.id);
+        } catch (walletErr) {
+        }
+        try {
+          await recordHistorySummary({
+            userId: req.user.id,
+            sessionId,
+            presentingProblemId,
+            urgencyLevel,
+            reasoningSummary: triageResultJson?.reasoning,
+          });
+        } catch (historyErr) {
+        }
+        try {
+          await creditReferralIfApplicable(req.user.id);
+        } catch (referralErr) {
+        }
+      }
+
+      return res.status(200).json({ escalate: true, session: toPublicSession(updatedSession) });
+    }
+
+    return res.status(200).json({ escalate: false, questions: result.questions });
   } catch (err) {
     return next(err);
   }

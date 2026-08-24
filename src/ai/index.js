@@ -107,6 +107,7 @@ async function runAiTriageAnalysis({ sessionId, patientResponses, providerFn }) 
  * @returns {Promise<{ questions: Array<{questionText: string, options: string[]}> }>}
  */
 async function generateTriageQuestions({
+  sessionId,
   presentingProblemId,
   initialDescription,
   age,
@@ -119,7 +120,8 @@ async function generateTriageQuestions({
   if (!providerFn) {
     throw new Error('generateTriageQuestions: providerFn الزامی است (mock برای تست، provider واقعی در تولید).');
   }
-  return generateTriageQuestionsCore({
+  const result = await generateTriageQuestionsCore({
+    sessionId,
     presentingProblemId,
     initialDescription,
     age,
@@ -129,6 +131,14 @@ async function generateTriageQuestions({
     medicalHistory,
     providerFn,
   });
+  if (result.escalate === true) {
+    return {
+      escalate: true,
+      urgencyLevel: mapInternalToExternalUrgency(result.urgencyLevel),
+      triageResultJson: result.triageResultJson,
+    };
+  }
+  return result;
 }
 
 module.exports = {

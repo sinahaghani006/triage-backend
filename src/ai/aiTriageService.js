@@ -186,6 +186,7 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
  * @throws {AIConnectorError | ResponseValidationError}
  */
 async function generateTriageQuestionsCore({
+  sessionId,
   presentingProblemId,
   initialDescription,
   age,
@@ -218,7 +219,33 @@ async function generateTriageQuestionsCore({
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     // callAIProvider عمداً بیرون try است: خطای اتصال/provider (AIConnectorError)
     // نباید retry شود و باید فوراً بالا برود — طبق طراحی مستندشده بالا.
-    const providerResult = await callAIProvider(prompt, providerFn);
+    let providerResult;
+    try {
+      providerResult = await callAIProvider(prompt, providerFn);
+    } catch (err) {
+      // 2026-08-24 fix (PM decision, this conversation): mirrors the same fix
+      // applied to generateSecondRoundCore -- a real provider/connection error
+      // (AIConnectorError) here used to throw raw all the way to the client.
+      // Now it resolves to the same {escalate:true, urgencyLevel, triageResultJson}
+      // shape as generateSecondRoundCore, per the golden rule (escalate-only).
+      console.error("generateTriageQuestionsCore: provider/connection error, falling back to doctor_review. raw=" + err.message);
+      const connectorFallback = buildFallbackTriageResult({
+        sessionId,
+        presentingProblemId,
+        questionsAsked: [],
+        patientResponses: [],
+        failureReason: 'AI provider/connection error while generating round-1 questions.',
+      });
+      const connectorValidated = TriageResultSchema.safeParse(connectorFallback);
+      if (!connectorValidated.success) {
+        throw err;
+      }
+      return {
+        escalate: true,
+        urgencyLevel: connectorValidated.data.urgency_level,
+        triageResultJson: connectorValidated.data,
+      };
+    }
 
     try {
       return validateQuestionsResponse(providerResult.rawText);
@@ -237,7 +264,23 @@ async function generateTriageQuestionsCore({
   }
 
   // هر دو تلاش شکست خوردند — همان خطای اعتبارسنجی نهایی را بالا می‌فرستیم.
-  throw lastValidationError;
+  console.warn("generateTriageQuestionsCore: all " + MAX_ATTEMPTS + " attempts failed validation (" + (lastValidationError ? lastValidationError.code : "unknown") + ") -- falling back to doctor_review per escalate-only rule.");
+  const validationFallback = buildFallbackTriageResult({
+    sessionId,
+    presentingProblemId,
+    questionsAsked: [],
+    patientResponses: [],
+    failureReason: "Round-1 question generation failed validation after " + MAX_ATTEMPTS + " attempts: " + (lastValidationError ? lastValidationError.message : "unknown"),
+  });
+  const validationFallbackValidated = TriageResultSchema.safeParse(validationFallback);
+  if (!validationFallbackValidated.success) {
+    throw lastValidationError;
+  }
+  return {
+    escalate: true,
+    urgencyLevel: validationFallbackValidated.data.urgency_level,
+    triageResultJson: validationFallbackValidated.data,
+  };
 }
 
 /**
