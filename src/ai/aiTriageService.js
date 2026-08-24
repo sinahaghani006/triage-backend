@@ -360,9 +360,33 @@ async function generateSecondRoundCore({
 
       return { escalate: false, questions: validated.questions };
     } catch (err) {
-      if (!(err instanceof ResponseValidationError)) {
-        throw err;
-      }
+        if (!(err instanceof ResponseValidationError)) {
+          // 2026-08-24 fix (production blocker, this conversation): previously,
+          // any non-validation error (e.g. AIConnectorError from a real
+          // provider/connection issue) was thrown raw here, bypassing the
+          // escalate-only fallback and surfacing a raw 503 to the patient.
+          // Now it always resolves to a safe doctor_review result, matching
+          // the same golden rule already enforced in runAiTriageAnalysisCore.
+          console.error(
+            `generateSecondRoundCore: non-validation error (${err.code || err.name}), falling back to doctor_review instead of throwing raw. raw=${err.message}`
+          );
+          const connectorFallback = buildFallbackTriageResult({
+            sessionId,
+            presentingProblemId,
+            questionsAsked: round1QuestionsAsked,
+            patientResponses: round1Responses,
+            failureReason: 'AI provider/connection error during round 2.',
+          });
+          const connectorValidated = TriageResultSchema.safeParse(connectorFallback);
+          if (!connectorValidated.success) {
+            throw err;
+          }
+          return {
+            escalate: true,
+            urgencyLevel: connectorValidated.data.urgency_level,
+            triageResultJson: connectorValidated.data,
+          };
+        }
       lastValidationError = err;
       if (attempt < MAX_ATTEMPTS) {
         console.warn(
