@@ -327,7 +327,33 @@ async function generateSecondRoundCore({
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     // callAIProvider عمداً بیرون try است: خطای اتصال نباید retry شود.
-    const providerResult = await callAIProvider(prompt, providerFn);
+      let providerResult;
+      try {
+        providerResult = await callAIProvider(prompt, providerFn);
+      } catch (err) {
+        // 2026-08-24 fix (production blocker, this conversation): a real
+        // provider/connection error (AIConnectorError) here used to throw
+        // raw all the way up to the client as a 503, bypassing escalate-only.
+        // Now it resolves to a safe doctor_review result, same as
+        // runAiTriageAnalysisCore already does for this exact error class.
+        console.error("generateSecondRoundCore: provider/connection error, falling back to doctor_review. raw=" + err.message);
+        const connectorFallback = buildFallbackTriageResult({
+          sessionId,
+          presentingProblemId,
+          questionsAsked: round1QuestionsAsked,
+          patientResponses: round1Responses,
+          failureReason: 'AI provider/connection error during round 2.',
+        });
+        const connectorValidated = TriageResultSchema.safeParse(connectorFallback);
+        if (!connectorValidated.success) {
+          throw err;
+        }
+        return {
+          escalate: true,
+          urgencyLevel: connectorValidated.data.urgency_level,
+          triageResultJson: connectorValidated.data,
+        };
+      }
 
     try {
       const validated = validateSecondRoundResponse(providerResult.rawText, {
