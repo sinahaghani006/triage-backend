@@ -92,6 +92,10 @@ async function getPatientDetail(req, res, next) {
         medicalHistory: medicalHistory || null,
         doctorReviewStatus: latestSessionForStatus?.doctorReviewStatus ?? null,
         sessionId: latestSessionForStatus?.id ?? null,
+        // 2026-08-22 fix (TASK 7 doc gap): Frontend had no way to know if
+        // staff-finalize (S5-only) was allowed without this -- doctorReviewStatus
+        // alone is ambiguous (ai_completed covers both S5 and auto-finalized S9).
+        currentState: latestSessionForStatus?.currentState ?? null,
       },
       triageHistory,
     });
