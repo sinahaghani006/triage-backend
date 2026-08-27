@@ -633,7 +633,7 @@ function generateQuestionsPrompt({
 
   const userContent = `
 ${narrativeIntro}
-توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}
+${presentingProblemId === 'other_symptoms' ? '' : `توضیح اولیه‌ی بیمار: ${initialDescription || '(توضیح اولیه ثبت نشده)'}`}
 
 ${medicalHistoryText}
 
