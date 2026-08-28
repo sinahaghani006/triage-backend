@@ -15,6 +15,7 @@ router.put('/me/medical-history', updateMedicalHistoryValidator, validateRequest
 router.post('/me/vitals', createVitalValidator, validateRequest, userController.createVital);
 router.get('/me/vitals', userController.listVitals);
 router.patch('/me/patient-details', patientDetailsValidator, validateRequest, userController.upsertPatientDetails);
+router.get('/me/patient-details', userController.getPatientDetails);
 router.get('/me/wallet', userController.getWalletInfo);
 router.patch('/me/password', changePasswordValidator, validateRequest, userController.changePassword);
 router.patch('/me/name', changeNameValidator, validateRequest, userController.changeName);

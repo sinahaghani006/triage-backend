@@ -1,4 +1,4 @@
-﻿const bcrypt = require('bcrypt');
+const bcrypt = require('bcrypt');
 const prisma = require('../config/prismaClient');
 const AppError = require('../utils/AppError');
 const { recordAudit } = require('../services/auditLogService');
@@ -197,6 +197,21 @@ async function upsertPatientDetails(req, res, next) {
   }
 }
 
+// GET /users/me/patient-details
+// 2026-08 (TASK 2): added so returning patients can pre-fill their profile
+// form with previously saved birthDate/weight/height/gender, instead of
+// re-entering them every visit. Read-only counterpart to the existing
+// PATCH /users/me/patient-details (upsert). Does not touch or replace any
+// existing endpoint -- purely additive, per PM decision (option A).
+async function getPatientDetails(req, res, next) {
+  try {
+    const record = await prisma.patientDetails.findUnique({ where: { userId: req.user.id } });
+    return res.status(200).json({ patientDetails: record || null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 // GET /users/me/wallet
 async function getWalletInfo(req, res, next) {
   try {
@@ -269,6 +284,7 @@ async function dismissHealthProfileReminder(req, res, next) {
 module.exports = {
   getWalletInfo,
   upsertPatientDetails,
+  getPatientDetails,
   getHistorySummary,
   getMedicalHistory,
   updateMedicalHistory,
