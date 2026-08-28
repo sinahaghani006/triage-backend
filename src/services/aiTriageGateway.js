@@ -128,7 +128,7 @@ function getPresentingProblems() {
     throw new AppError("AI module returned an unexpected shape from getPresentingProblemsList (expected an array)", 502, "AI_RESPONSE_INVALID");
   }
 
-  return list.map(({ id, labelFa }) => ({ id, label: labelFa }));
+  return list.map(({ id, labelFa, synonyms }) => ({ id, label: labelFa, synonyms: synonyms || [] }));
 }
 
 // 2026-07-22 fix: same embedding issue did NOT apply here -- generateTriageQuestions
