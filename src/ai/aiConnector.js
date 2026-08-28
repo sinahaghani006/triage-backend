@@ -16,6 +16,68 @@
  * است (نگاه کن به createMockProvider در پایین فایل).
  */
 
+// 2026-08-28 fix (production risk before demo, PM-approved): a simple
+// in-process concurrency limiter for AI provider calls. Groq's on-demand
+// tier has a strict TPM (tokens-per-minute) cap; multiple simultaneous
+// patients hitting generate-questions/second-round-questions/submit-symptoms
+// at once can burst past that cap and trigger 429 rate_limit_exceeded,
+// which (correctly) falls back to doctor_review but silently disables
+// the adaptive second-round-questions feature for the user.
+//
+// IMPORTANT KNOWN LIMITATION: this limiter is in-process (module-level
+// state). On Vercel serverless, each warm function instance has its own
+// copy of this state -- it does NOT coordinate across multiple concurrent
+// instances. It only smooths bursts *within* a single warm instance, not
+// the true aggregate load across all instances. It is a partial mitigation,
+// not a full fix -- the durable fix is a higher-capacity Groq tier.
+//
+// Configurable via AI_MAX_CONCURRENT_CALLS env var (default 3 if unset or
+// invalid). Requests beyond the limit wait in a FIFO queue rather than
+// being rejected immediately; a queued request that waits longer than
+// queueTimeoutMs fails with a QUEUE_TIMEOUT AIConnectorError (still
+// resolves to a safe doctor_review fallback upstream, per the golden rule).
+const DEFAULT_MAX_CONCURRENT_AI_CALLS = 3;
+const DEFAULT_QUEUE_TIMEOUT_MS = 20000;
+
+let activeAiCalls = 0;
+const aiCallWaitQueue = [];
+
+function getMaxConcurrentAiCalls() {
+  const fromEnv = parseInt(process.env.AI_MAX_CONCURRENT_CALLS, 10);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_MAX_CONCURRENT_AI_CALLS;
+}
+
+function acquireAiCallSlot(queueTimeoutMs) {
+  const maxConcurrent = getMaxConcurrentAiCalls();
+  if (activeAiCalls < maxConcurrent) {
+    activeAiCalls++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const entry = { resolve, timer: null };
+    entry.timer = setTimeout(() => {
+      const idx = aiCallWaitQueue.indexOf(entry);
+      if (idx !== -1) aiCallWaitQueue.splice(idx, 1);
+      reject(
+        new AIConnectorError('در صف انتظار سرویس هوش مصنوعی timeout شد (ظرفیت هم‌زمان پر است).', {
+          code: 'QUEUE_TIMEOUT',
+        })
+      );
+    }, queueTimeoutMs);
+    aiCallWaitQueue.push(entry);
+  });
+}
+
+function releaseAiCallSlot() {
+  activeAiCalls--;
+  if (aiCallWaitQueue.length > 0) {
+    const next = aiCallWaitQueue.shift();
+    clearTimeout(next.timer);
+    activeAiCalls++;
+    next.resolve();
+  }
+}
+
 class AIConnectorError extends Error {
   constructor(message, { cause, code } = {}) {
     super(message);
@@ -54,7 +116,7 @@ function validatePromptInput(prompt) {
  * در لایه‌ی بالاتر (aiTriageService.js) بر اساس AI_PROVIDER انجام می‌شود تا
  * این فایل به یک وابستگی خاص قفل نشود.
  */
-async function callAIProvider(prompt, providerFn, { timeoutMs = 15000 } = {}) {
+async function callAIProvider(prompt, providerFn, { timeoutMs = 15000, queueTimeoutMs = 20000 } = {}) {
   validatePromptInput(prompt);
 
   if (typeof providerFn !== 'function') {
@@ -62,6 +124,8 @@ async function callAIProvider(prompt, providerFn, { timeoutMs = 15000 } = {}) {
       code: 'INVALID_PROVIDER_FN',
     });
   }
+
+  await acquireAiCallSlot(queueTimeoutMs);
 
   let timeoutHandle;
   try {
@@ -90,6 +154,7 @@ async function callAIProvider(prompt, providerFn, { timeoutMs = 15000 } = {}) {
     });
   } finally {
     clearTimeout(timeoutHandle);
+    releaseAiCallSlot();
   }
 }
 
