@@ -69,6 +69,29 @@ const prisma = new PrismaClient({
 migration با `db push`/SQL دستی زده شده بودند ولی هیچ‌وقت رسماً در
 `_prisma_migrations` ثبت نشده بودند).
 
+## بعد از هر migration دستی SQL خام، schema.prisma را با DB واقعی sync کن (کشف‌شده 2026-08-30)
+
+اگر یک migration دستی (SQL خام، نه از طریق Prisma) یک `DEFAULT` یا
+constraint روی یک ستون در دیتابیس واقعی تنظیم می‌کند، این باید
+**صریحاً** هم در `schema.prisma` منعکس شود (مثلاً با `@default(...)`).
+اگر این کار انجام نشود، Prisma Client آن ستون را یک آرگومان الزامی
+در نظر می‌گیرد که باید در هر `.create()` فرستاده شود — و چون کد آن
+را نمی‌فرستد، **validation خودِ Prisma Client قبل از رسیدن به
+دیتابیس fail می‌شود** (`PrismaClientValidationError`), و چون
+`errorHandler.js` این نوع خطا را نمی‌شناسد، به‌صورت یک `500`
+عمومی و غیرقابل‌ردیابی به کاربر نمایش داده می‌شود.
+
+مثال واقعی: migration `visit_number` (TASK 7) یک `DEFAULT
+nextval(...)` مستقیم روی دیتابیس تنظیم کرد ولی این هرگز در
+`schema.prisma` اعلام نشد — نتیجه: `POST /sessions` کاملاً از کار
+افتاد تا وقتی `@default(autoincrement())` (که فقط یک annotation
+informational است، نه ساخت sequence جدید) به schema اضافه شد.
+
+**قاعده:** بعد از هر migration دستی SQL خام، همیشه با یک تست
+مستقیم (`prisma.<model>.create()` با حداقل داده) بررسی کن که آیا
+Prisma Client فیلدی را به‌اشتباه الزامی می‌داند که در دیتابیس
+پیش‌فرض دارد.
+
 **بدهی فنی رسمی (تصمیم PM، برای بعد از دمو):**
 - ساخت یک محیط staging/local کاملاً جدا از production.
 - یک فرآیند رسمی migrate deploy (حتی یک اسکریپت ساده‌ی pre-push)
