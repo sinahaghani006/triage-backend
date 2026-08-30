@@ -160,7 +160,7 @@ model Session {
   // migration ordered by createdAt ASC, not Postgres physical row order --
   // see migration.sql for why the naive Prisma-generated approach was
   // unsafe here.
-  visitNumber         Int           @unique @map("visit_number")
+  visitNumber         Int           @unique @default(autoincrement()) @map("visit_number")
   currentState        SessionState  @default(S2_collecting_information) @map("current_state")
   // Self-attestation that this triage request is genuinely for the logged-in
   // user themself (2026-07-22, project manager decision) -- guards against
