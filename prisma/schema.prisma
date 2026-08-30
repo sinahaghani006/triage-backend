@@ -153,6 +153,14 @@ model PatientDetails {
 model Session {
   id                  String        @id @default(uuid())
   userId              String        @map("user_id")
+  // 2026-08 (TASK 7, PM request): sequential visit number (101, 102, ...)
+  // shown to doctors/patients as a human-friendly reference, independent
+  // from the UUID id and independent from display order (list order stays
+  // newest-first, unaffected by this field). Backfilled in a custom SQL
+  // migration ordered by createdAt ASC, not Postgres physical row order --
+  // see migration.sql for why the naive Prisma-generated approach was
+  // unsafe here.
+  visitNumber         Int           @unique @map("visit_number")
   currentState        SessionState  @default(S2_collecting_information) @map("current_state")
   // Self-attestation that this triage request is genuinely for the logged-in
   // user themself (2026-07-22, project manager decision) -- guards against

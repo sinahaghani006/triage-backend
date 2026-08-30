@@ -1,2 +1,2 @@
-﻿CREATE TYPE "DoctorReviewStatus" AS ENUM ('unfinished', 'ai_completed', 'doctor_message_sent', 'visited_inperson', 'appointment_scheduled', 'closed_no_action');
+CREATE TYPE "DoctorReviewStatus" AS ENUM ('unfinished', 'ai_completed', 'doctor_message_sent', 'visited_inperson', 'appointment_scheduled', 'closed_no_action');
 ALTER TABLE "sessions" ADD COLUMN "doctor_review_status" "DoctorReviewStatus" NOT NULL DEFAULT 'unfinished';

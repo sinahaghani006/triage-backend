@@ -12,6 +12,7 @@ function toPublicSession(session) {
   return {
     id: session.id,
     userId: session.userId,
+    visitNumber: session.visitNumber,
     currentState: session.currentState,
     state: session.currentState,
     presentingProblemId: session.presentingProblemId,
