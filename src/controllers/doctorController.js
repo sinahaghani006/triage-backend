@@ -70,11 +70,16 @@ async function getPatientDetail(req, res, next) {
     if (!user || user.role !== "patient") {
       throw new AppError("Patient not found", 404, "PATIENT_NOT_FOUND");
     }
-    const [patientDetails, medicalHistory, triageHistory, latestSessionForStatus] = await Promise.all([
+    const [patientDetails, medicalHistory, triageHistory, latestSessionForStatus, recentVitals] = await Promise.all([
       prisma.patientDetails.findUnique({ where: { userId: id } }),
       prisma.medicalHistory.findUnique({ where: { userId: id } }),
       getRecentHistorySummary(id, 20),
       prisma.session.findFirst({ where: { userId: id }, orderBy: { createdAt: "desc" } }),
+      prisma.periodicVitals.findMany({
+        where: { userId: id },
+        orderBy: { recordedAt: "desc" },
+        take: 3,
+      }),
     ]);
 
     return res.status(200).json({
@@ -96,6 +101,7 @@ async function getPatientDetail(req, res, next) {
         // staff-finalize (S5-only) was allowed without this -- doctorReviewStatus
         // alone is ambiguous (ai_completed covers both S5 and auto-finalized S9).
         currentState: latestSessionForStatus?.currentState ?? null,
+        recentVitals: recentVitals,
       },
       triageHistory,
     });
