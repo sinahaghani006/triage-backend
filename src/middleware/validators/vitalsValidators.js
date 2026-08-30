@@ -1,6 +1,6 @@
 const { body } = require('express-validator');
 
-const VALID_VITAL_TYPES = ['blood_pressure', 'blood_sugar', 'lipids', 'temperature', 'weight', 'height'];
+const VALID_VITAL_TYPES = ['blood_pressure', 'blood_sugar', 'lipids', 'temperature', 'weight', 'height', 'spo2', 'heart_rate', 'respiratory_rate', 'bmi'];
 
 const createVitalValidator = [
   body('type')
