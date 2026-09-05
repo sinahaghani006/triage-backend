@@ -1,5 +1,6 @@
 const AppError = require("../utils/AppError");
 const { createGroqProvider } = require("../ai/providers/groqProvider");
+const { createGeminiProvider } = require("../ai/providers/geminiProvider");
 const { ResponseValidationError } = require("../ai/responseValidator");
 const { AIConnectorError } = require("../ai/aiConnector");
 
@@ -52,6 +53,20 @@ function resolveProviderFn(mode = "triage") {
       throw new AppError("GROQ_API_KEY is not set but AI_MODEL is groq/*", 500, "AI_CONFIG_MISSING");
     }
     return createGroqProvider(model);
+  }
+
+  // 2026-08-31 (experimental, PM-approved): parallel evaluation path for
+  // Gemini as a potential higher-TPM-capacity option alongside Groq.
+  // NOT wired into any automatic fallback chain yet -- activating this
+  // requires explicitly setting AI_MODEL=gemini/<model-name>, which fully
+  // replaces Groq for all AI calls (no chain logic exists yet). A real
+  // Groq-then-Gemini fallback chain is a separate, later change once
+  // AI-role confirms output quality is acceptable.
+  if (provider === "gemini") {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new AppError("GEMINI_API_KEY is not set but AI_MODEL is gemini/*", 500, "AI_CONFIG_MISSING");
+    }
+    return createGeminiProvider(model);
   }
 
   throw new AppError(`Unsupported AI_MODEL provider: "${provider}"`, 500, "AI_CONFIG_UNSUPPORTED");
