@@ -13,8 +13,8 @@ router.get("/test-gemini-live", async (req, res) => {
   try {
     const providerFn = createGeminiProvider("gemini-3.6-flash");
     const result = await providerFn({
-      system: "You are a helpful assistant. Always respond with valid JSON only, no markdown formatting, no code fences.",
-      user: 'Respond with this exact JSON: {"status": "ok", "test": true}',
+      system: "You are a medical triage assistant. Always respond with valid JSON only, no markdown formatting, no code fences. Respond in Persian (Farsi) for text fields.",
+      user: 'A 30-year-old male patient reports: cough and mild fever for 2 days. Respond ONLY with this exact JSON shape (fill in realistic values): {"urgency_suggestion": "normal|home_care|doctor_review|emergency", "confidence": 0.0-1.0, "reasoning": "برief Persian text explaining the assessment", "clinical_alerts": [], "is_complete": true}',
     });
     return res.status(200).json({ success: true, result });
   } catch (err) {
