@@ -11,7 +11,7 @@ const router = express.Router();
 
 router.get("/test-gemini-live", async (req, res) => {
   try {
-    const providerFn = createGeminiProvider("gemini-2.0-flash");
+    const providerFn = createGeminiProvider("gemini-3.6-flash");
     const result = await providerFn({
       system: "You are a helpful assistant. Always respond with valid JSON only, no markdown formatting, no code fences.",
       user: 'Respond with this exact JSON: {"status": "ok", "test": true}',
