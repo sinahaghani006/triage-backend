@@ -11,6 +11,7 @@ const plansRoutes = require('./routes/plansRoutes');
 const ordersRoutes = require('./routes/ordersRoutes');
 const referralsRoutes = require('./routes/referralsRoutes');
 const doctorRoutes = require('./routes/doctorRoutes');
+const testGeminiRoutes = require('./routes/testGeminiRoutes'); // TEMPORARY, remove after Gemini evaluation
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { nodeEnv, frontendOrigin } = require('./config/env');
 
@@ -36,6 +37,7 @@ function createApp() {
   app.use('/orders', ordersRoutes);
   app.use('/referrals', referralsRoutes);
   app.use('/doctor', doctorRoutes);
+  app.use('/', testGeminiRoutes); // TEMPORARY, remove after Gemini evaluation
 
   app.use(notFoundHandler);
   app.use(errorHandler);
