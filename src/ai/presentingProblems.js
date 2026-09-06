@@ -86,7 +86,7 @@ const FINAL_PRESENTING_PROBLEMS = [
   {
     id: 'headache_dizziness',
     labelFa: 'سردرد یا سرگیجه',
-    synonyms: ['سرگیجه', 'گیجی'],
+    synonyms: ['سرگیجه', 'گیجی', 'میگرن'],
   },
   {
     id: 'chest_pain_breathing',
