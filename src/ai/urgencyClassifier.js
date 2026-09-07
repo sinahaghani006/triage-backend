@@ -159,6 +159,40 @@ function buildTriageResultFromAI({
   };
 }
 
+// *** فیکس (این گفتگو): failureReason گاهی رشته‌ی خام انگلیسی از
+// aiTriageService.js می‌رسید (مثلاً 'AI provider/connection error
+// during round 2.') و مستقیم بدون ترجمه در reasoning می‌نشست --
+// دقیقاً نقض قانون طلایی #۳ (هیچ متن فنی/انگلیسی نباید به بیمار
+// نمایش داده شود). این نگاشت، بر اساس کد پایدار (نه matching متن
+// شکننده)، هر failureReason را به یک پیام فارسی امن تبدیل می‌کند.
+// اگر failureReason یک object با فیلد code باشد از این نگاشت
+// استفاده می‌شود؛ اگر فقط یک رشته باشد (مسیرهای قدیمی‌تر که هنوز
+// فارسی می‌فرستند)، همان‌طور که هست عبور داده می‌شود.
+const SAFE_FAILURE_REASON_MAP = {
+  TIMEOUT: 'ارتباط با سرویس هوش مصنوعی با تأخیر مواجه شد.',
+  INVALID_PROVIDER_RESPONSE: 'پاسخ دریافتی از سرویس هوش مصنوعی معتبر نبود.',
+  PROVIDER_CALL_FAILED: 'در حال حاضر امکان ارتباط با سرویس هوش مصنوعی نیست.',
+  INVALID_PROMPT_SHAPE: 'خطای داخلی در آماده‌سازی درخواست.',
+  INVALID_PROMPT_SYSTEM: 'خطای داخلی در آماده‌سازی درخواست.',
+  INVALID_PROMPT_USER: 'خطای داخلی در آماده‌سازی درخواست.',
+  INVALID_PROVIDER_FN: 'خطای داخلی در پیکربندی سرویس هوش مصنوعی.',
+  QUEUE_TIMEOUT: 'ظرفیت هم‌زمان سرویس هوش مصنوعی پر بود؛ لطفاً کمی بعد دوباره تلاش کنید.',
+  RESPONSE_VALIDATION_FAILED: 'ساختار پاسخ سیستم هوش مصنوعی نامعتبر بود.',
+  ROUND2_PROVIDER_ERROR: 'در حال حاضر امکان ارتباط با سرویس هوش مصنوعی نیست.',
+  ROUND1_PROVIDER_ERROR: 'در حال حاضر امکان ارتباط با سرویس هوش مصنوعی نیست.',
+  UNEXPECTED: 'خطای غیرمنتظره‌ی داخلی.',
+};
+
+function resolveSafeFailureReason(failureReason) {
+  if (failureReason && typeof failureReason === 'object' && failureReason.code) {
+    return SAFE_FAILURE_REASON_MAP[failureReason.code] || 'خطای ارتباطی با سرویس هوش مصنوعی.';
+  }
+  if (typeof failureReason === 'string' && failureReason.trim() !== '') {
+    return failureReason;
+  }
+  return 'نامشخص';
+}
+
 /**
  * ساخت نتیجه fallback ایمن — قانون طلایی #۳ سند: در هر نوع خطای AI یا
  * provider (timeout، پاسخ نامعتبر، عدم قطعیت غیرقابل‌حل)، همیشه و فقط
@@ -171,12 +205,13 @@ function buildFallbackTriageResult({
   patientResponses = [],
   failureReason,
 }) {
+  const safeFailureReason = resolveSafeFailureReason(failureReason);
   return {
     session_id: sessionId,
     presenting_problem_id: presentingProblemId,
     urgency_level: 'doctor_review',
     confidence: 0,
-    reasoning: `AI در دسترس نبود یا خروجی نامعتبر بود (دلیل: ${failureReason || 'نامشخص'}). طبق قانون escalate-only پروژه، به‌صورت ایمن doctor_review انتخاب شد.`,
+    reasoning: `AI در دسترس نبود یا خروجی نامعتبر بود (دلیل: ${safeFailureReason}). طبق قانون escalate-only پروژه، به‌صورت ایمن doctor_review انتخاب شد.`,
     clinical_alerts: [],
     recommendations: [],
     questions_asked: questionsAsked,

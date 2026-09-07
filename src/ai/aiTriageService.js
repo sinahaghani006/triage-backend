@@ -234,7 +234,7 @@ async function generateTriageQuestionsCore({
         presentingProblemId,
         questionsAsked: [],
         patientResponses: [],
-        failureReason: 'AI provider/connection error while generating round-1 questions.',
+        failureReason: { code: 'ROUND1_PROVIDER_ERROR' },
       });
       const connectorValidated = TriageResultSchema.safeParse(connectorFallback);
       if (!connectorValidated.success) {
@@ -270,7 +270,7 @@ async function generateTriageQuestionsCore({
     presentingProblemId,
     questionsAsked: [],
     patientResponses: [],
-    failureReason: "Round-1 question generation failed validation after " + MAX_ATTEMPTS + " attempts: " + (lastValidationError ? lastValidationError.message : "unknown"),
+    failureReason: { code: 'RESPONSE_VALIDATION_FAILED' },
   });
   const validationFallbackValidated = TriageResultSchema.safeParse(validationFallback);
   if (!validationFallbackValidated.success) {
@@ -385,7 +385,7 @@ async function generateSecondRoundCore({
           presentingProblemId,
           questionsAsked: round1QuestionsAsked,
           patientResponses: round1Responses,
-          failureReason: 'AI provider/connection error during round 2.',
+          failureReason: { code: 'ROUND2_PROVIDER_ERROR' },
         });
         const connectorValidated = TriageResultSchema.safeParse(connectorFallback);
         if (!connectorValidated.success) {
@@ -444,7 +444,7 @@ async function generateSecondRoundCore({
             presentingProblemId,
             questionsAsked: round1QuestionsAsked,
             patientResponses: round1Responses,
-            failureReason: 'AI provider/connection error during round 2.',
+            failureReason: { code: 'ROUND2_PROVIDER_ERROR' },
           });
           const connectorValidated = TriageResultSchema.safeParse(connectorFallback);
           if (!connectorValidated.success) {
@@ -484,7 +484,7 @@ async function generateSecondRoundCore({
     presentingProblemId,
     questionsAsked: round1QuestionsAsked,
     patientResponses: round1Responses,
-    failureReason: `دور دوم بعد از ${MAX_ATTEMPTS} تلاش با خطای اعتبارسنجی شکست خورد: ${lastValidationError?.message}`,
+    failureReason: { code: 'RESPONSE_VALIDATION_FAILED' },
   });
 
   const fallbackValidated = TriageResultSchema.safeParse(fallbackTriageResult);
