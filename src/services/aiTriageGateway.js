@@ -63,10 +63,27 @@ function resolveProviderFn(mode = "triage") {
   // Groq-then-Gemini fallback chain is a separate, later change once
   // AI-role confirms output quality is acceptable.
   if (provider === "gemini") {
-    if (!process.env.GEMINI_API_KEY) {
+    // 2026-09 fix (production blocker, evidence: real patient session on
+    // production hit Gemini's per-minute RPM cap on round-2 exactly
+    // because round-1 had just used up the same key's RPM budget --
+    // confirmed by PM/support team analysis). Using separate API keys
+    // (from separate Google accounts, so they don't share a project-level
+    // quota) per pipeline stage means round-1, round-2, and the final
+    // triage-decision call each get their own independent RPM budget,
+    // instead of competing for one shared 10-15 RPM limit. Falls back to
+    // the base GEMINI_API_KEY if a stage-specific key isn't set, so this
+    // is backward-compatible with the original single-key setup.
+    const keyByStage = {
+      triage: process.env.GEMINI_API_KEY_FINAL || process.env.GEMINI_API_KEY,
+      questions: process.env.GEMINI_API_KEY,
+      second_round: process.env.GEMINI_API_KEY_ROUND2 || process.env.GEMINI_API_KEY,
+      doctor_assist: process.env.GEMINI_API_KEY_FINAL || process.env.GEMINI_API_KEY,
+    };
+    const apiKeyForStage = keyByStage[mode] || process.env.GEMINI_API_KEY;
+    if (!apiKeyForStage) {
       throw new AppError("GEMINI_API_KEY is not set but AI_MODEL is gemini/*", 500, "AI_CONFIG_MISSING");
     }
-    return createGeminiProvider(model);
+    return createGeminiProvider(model, apiKeyForStage);
   }
 
   throw new AppError(`Unsupported AI_MODEL provider: "${provider}"`, 500, "AI_CONFIG_UNSUPPORTED");
@@ -231,7 +248,7 @@ async function generateSecondRoundQuestions({
     throw new AppError("src/ai does not export generateSecondRoundQuestions as documented in the contract", 500, "AI_CONTRACT_MISMATCH");
   }
 
-  const providerFn = resolveProviderFn("questions");
+  const providerFn = resolveProviderFn("second_round");
 
   try {
     return await aiModule.generateSecondRoundQuestions({

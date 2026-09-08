@@ -26,7 +26,8 @@
  *   مشکل جدیدی ایجاد کنه که این پیاده‌سازی به‌تنهایی حلش نمی‌کنه
  */
 
-function createGeminiProvider(model) {
+function createGeminiProvider(model, apiKey) {
+  const resolvedApiKey = apiKey || process.env.GEMINI_API_KEY;
   return async function geminiProviderFn({ system, user }) {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -34,7 +35,7 @@ function createGeminiProvider(model) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": process.env.GEMINI_API_KEY,
+          "x-goog-api-key": resolvedApiKey,
         },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: system }] },
