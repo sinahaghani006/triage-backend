@@ -77,7 +77,12 @@ function resolveProviderFn(mode = "triage") {
       triage: process.env.GEMINI_API_KEY_FINAL || process.env.GEMINI_API_KEY,
       questions: process.env.GEMINI_API_KEY,
       second_round: process.env.GEMINI_API_KEY_ROUND2 || process.env.GEMINI_API_KEY,
-      doctor_assist: process.env.GEMINI_API_KEY_FINAL || process.env.GEMINI_API_KEY,
+      // 2026-09 (PM decision): doctor_assist عمداً از همون کلید questions
+    // استفاده می‌کنه، نه GEMINI_API_KEY_FINAL. ریسک پذیرفته‌شده: دستیار AI
+    // دکتر و مرحله‌ی سؤالات دور اول بیمار حالا روی یک بودجه‌ی RPM مشترک
+    // رقابت می‌کنن. اگه در آینده این باعث rate-limit جدید شد، اولین قدم
+    // بررسی همینه، نه یک incident جدید و ناشناس.
+    doctor_assist: process.env.GEMINI_API_KEY,
     };
     const apiKeyForStage = keyByStage[mode] || process.env.GEMINI_API_KEY;
     if (!apiKeyForStage) {
