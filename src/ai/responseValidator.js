@@ -659,6 +659,22 @@ function validateSecondRoundResponse(rawText, { round1QuestionTexts = [] } = {})
       `validateSecondRoundResponse: چک تکرار اجرا شد — ${duplicateIndexes.length} سؤال تکراری از ${sanitizedQuestions.length} یافت شد.`
     );
     if (duplicateIndexes.length > 0) {
+      // 🔍 لاگ تشخیصی موقت (BUILD_TAG round2-duplicate-debug-2026-09-09) --
+      // هدف: دیدن دقیق متن سؤال رد‌شده + اینکه رد به‌خاطر concept بوده یا
+      // شباهت واژگانی خام، تا فیکس نهایی بر پایه‌ی evidence طراحی شود، نه حدس.
+      // بعد از تحلیل، این بلوک باید حذف شود.
+      duplicateIndexes.forEach((idx) => {
+        const q2 = sanitizedQuestions[idx];
+        const concepts2 = [...findMatchingConcepts(q2.questionText)];
+        const words2 = extractSignificantWords(q2.questionText);
+        const lexicalMatches = (round1QuestionTexts || []).map((q1text, i1) => {
+          const sim = jaccardSimilarity(extractSignificantWords(q1text), words2);
+          return { round1Index: i1 + 1, round1Text: q1text, similarity: Number(sim.toFixed(2)) };
+        }).filter((m) => m.similarity > 0);
+        console.log(
+          `[ROUND2_DUP_DEBUG] idx=${idx + 1} questionText="${q2.questionText}" matchedConcepts=[${concepts2.join(',')}] lexicalMatches=${JSON.stringify(lexicalMatches)}`
+        );
+      });
       throw new ResponseValidationError(
         `${duplicateIndexes.length} سؤال دور دوم (شماره‌ی ${duplicateIndexes.map((i) => i + 1).join('، ')}) با سؤالات دور اول هم‌پوشانی واژگانی بالا دارند — رد شد تا سؤال تکراری به بیمار نشان داده نشود.`,
         { code: 'ROUND2_QUESTION_DUPLICATE_DETECTED', rawText }
