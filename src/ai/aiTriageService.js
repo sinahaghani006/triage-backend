@@ -76,7 +76,7 @@ async function runAiTriageAnalysisCore({ sessionId, patientContext, providerFn }
       medicalHistory,
     });
 
-    const providerResult = await callAIProvider(prompt, providerFn);
+    const providerResult = await callAIProvider(prompt, providerFn, { timeoutMs: 65000 });
     const aiRaw = validateAIResponse(providerResult.rawText);
 
     if (!aiRaw.is_complete) {
@@ -221,7 +221,7 @@ async function generateTriageQuestionsCore({
     // نباید retry شود و باید فوراً بالا برود — طبق طراحی مستندشده بالا.
     let providerResult;
     try {
-      providerResult = await callAIProvider(prompt, providerFn);
+      providerResult = await callAIProvider(prompt, providerFn, { timeoutMs: 65000 });
     } catch (err) {
       // 2026-08-24 fix (PM decision, this conversation): mirrors the same fix
       // applied to generateSecondRoundCore -- a real provider/connection error
@@ -378,7 +378,7 @@ async function generateSecondRoundCore({
     // callAIProvider عمداً بیرون try است: خطای اتصال نباید retry شود.
       let providerResult;
       try {
-        providerResult = await callAIProvider(prompt, providerFn);
+        providerResult = await callAIProvider(prompt, providerFn, { timeoutMs: 65000 });
       } catch (err) {
         // 2026-08-24 fix (production blocker, this conversation): a real
         // provider/connection error (AIConnectorError) here used to throw

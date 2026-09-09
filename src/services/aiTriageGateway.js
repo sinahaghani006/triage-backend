@@ -4,6 +4,102 @@ const { createGeminiProvider } = require("../ai/providers/geminiProvider");
 const { ResponseValidationError } = require("../ai/responseValidator");
 const { AIConnectorError } = require("../ai/aiConnector");
 
+// 2026-09 (PM decision, explicit deviation from the documented
+// provider-agnostic architecture rule): a hardcoded Gemini-primary ->
+// Gemini-secondary -> Groq fallback chain, used only when AI_MODEL="chain".
+// Rationale: neither Gemini's free-tier RPD (20/day) nor Groq's shared-org
+// TPM (8000/min) alone was sufficient for real traffic; this spreads load
+// across more independent quota budgets before giving up.
+// Each attempt has its own short timeout (PER_ATTEMPT_TIMEOUT_MS) so a
+// stuck call doesn't block the whole chain -- but the OUTER callAIProvider
+// timeoutMs at every call site using this chain must be raised accordingly
+// (see aiTriageService.js / doctorController.js) or the outer race will
+// fire before the chain even reaches Groq.
+const PER_ATTEMPT_TIMEOUT_MS = 12000;
+
+function tryProviderWithTimeout(providerFn, prompt, timeoutMs, label) {
+  let timeoutHandle;
+  return Promise.race([
+    providerFn(prompt),
+    new Promise((_, reject) => {
+      timeoutHandle = setTimeout(() => reject(new Error(`${label}: پاسخ در ${timeoutMs}ms دریافت نشد.`)), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timeoutHandle));
+}
+
+function createFallbackChainProviderFn(mode) {
+  const geminiModel = process.env.AI_MODEL_GEMINI || "gemini-3.6-flash";
+  const groqModel = process.env.AI_MODEL_GROQ || "openai/gpt-oss-120b";
+
+  const primaryKeyByStage = {
+    triage: process.env.GEMINI_API_KEY_FINAL,
+    questions: process.env.GEMINI_API_KEY,
+    second_round: process.env.GEMINI_API_KEY_ROUND2,
+    doctor_assist: process.env.GEMINI_API_KEY,
+  };
+  const secondaryKeyByStage = {
+    triage: process.env.GEMINI_API_KEY_FINAL_SECONDARY,
+    questions: process.env.GEMINI_API_KEY_SECONDARY,
+    second_round: process.env.GEMINI_API_KEY_ROUND2_SECONDARY,
+    doctor_assist: process.env.GEMINI_API_KEY_SECONDARY,
+  };
+  const groqKeyByStage = {
+    triage: process.env.GROQ_API_KEY_FINAL || process.env.GROQ_API_KEY,
+    questions: process.env.GROQ_API_KEY,
+    second_round: process.env.GROQ_API_KEY_ROUND2 || process.env.GROQ_API_KEY,
+    doctor_assist: process.env.GROQ_API_KEY,
+  };
+
+  const primaryKey = primaryKeyByStage[mode];
+  const secondaryKey = secondaryKeyByStage[mode];
+  const groqKey = groqKeyByStage[mode];
+
+  if (!primaryKey) {
+    throw new AppError(`GEMINI primary key is not set for stage "${mode}" (chain mode)`, 500, "AI_CONFIG_MISSING");
+  }
+  if (!groqKey) {
+    throw new AppError(`GROQ_API_KEY is not set for stage "${mode}" fallback (chain mode)`, 500, "AI_CONFIG_MISSING");
+  }
+
+  const primaryProviderFn = createGeminiProvider(geminiModel, primaryKey);
+  const secondaryProviderFn = secondaryKey ? createGeminiProvider(geminiModel, secondaryKey) : null;
+  const groqProviderFn = createGroqProvider(groqModel, groqKey);
+
+  return async function fallbackChainProviderFn(prompt) {
+    const attemptErrors = [];
+
+    for (let i = 1; i <= 2; i++) {
+      try {
+        return await tryProviderWithTimeout(primaryProviderFn, prompt, PER_ATTEMPT_TIMEOUT_MS, `gemini-primary-attempt-${i}`);
+      } catch (err) {
+        attemptErrors.push(`gemini-primary-attempt-${i}: ${err.message}`);
+        console.warn(`[AI_FALLBACK_CHAIN] mode=${mode} gemini-primary attempt ${i} failed: ${err.message}`);
+      }
+    }
+
+    if (secondaryProviderFn) {
+      for (let i = 1; i <= 2; i++) {
+        try {
+          return await tryProviderWithTimeout(secondaryProviderFn, prompt, PER_ATTEMPT_TIMEOUT_MS, `gemini-secondary-attempt-${i}`);
+        } catch (err) {
+          attemptErrors.push(`gemini-secondary-attempt-${i}: ${err.message}`);
+          console.warn(`[AI_FALLBACK_CHAIN] mode=${mode} gemini-secondary attempt ${i} failed: ${err.message}`);
+        }
+      }
+    } else {
+      console.warn(`[AI_FALLBACK_CHAIN] mode=${mode} no secondary Gemini key configured -- skipping directly to Groq.`);
+    }
+
+    try {
+      console.warn(`[AI_FALLBACK_CHAIN] mode=${mode} falling back to Groq after ${attemptErrors.length} failed Gemini attempt(s).`);
+      return await tryProviderWithTimeout(groqProviderFn, prompt, PER_ATTEMPT_TIMEOUT_MS, "groq-fallback");
+    } catch (err) {
+      attemptErrors.push(`groq-fallback: ${err.message}`);
+      throw new Error(`تمام providerهای زنجیره برای mode="${mode}" شکست خوردند: ${attemptErrors.join(" | ")}`);
+    }
+  };
+}
+
 function resolveProviderFn(mode = "triage") {
   const aiModel = process.env.AI_MODEL || "";
   const [provider, ...modelParts] = aiModel.split("/");
@@ -46,6 +142,10 @@ function resolveProviderFn(mode = "triage") {
       }),
       meta: { provider: "mock", model: "mock-v1" },
     });
+  }
+
+  if (provider === "chain") {
+    return createFallbackChainProviderFn(mode);
   }
 
   if (provider === "groq") {

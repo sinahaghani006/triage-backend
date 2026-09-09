@@ -169,7 +169,7 @@ async function getAiAssistant(req, res, next) {
     });
 
     const providerFn = resolveProviderFn("doctor_assist");
-    const { rawText } = await callAIProvider(prompt, providerFn);
+    const { rawText } = await callAIProvider(prompt, providerFn, { timeoutMs: 65000 });
 
     let parsed;
     try {
