@@ -49,10 +49,20 @@ function resolveProviderFn(mode = "triage") {
   }
 
   if (provider === "groq") {
-    if (!process.env.GROQ_API_KEY) {
+    // 2026-09 (PM decision): مشابه Gemini، کلید جدا به ازای هر مرحله --
+    // شواهد واقعی production نشان داد سقف TPM/Groq روی سطح organization
+    // است، پس اکانت‌های Groq جدا لازم بود، نه فقط کلیدهای جدا از یک اکانت.
+    const groqKeyByStage = {
+      triage: process.env.GROQ_API_KEY_FINAL || process.env.GROQ_API_KEY,
+      questions: process.env.GROQ_API_KEY,
+      second_round: process.env.GROQ_API_KEY_ROUND2 || process.env.GROQ_API_KEY,
+      doctor_assist: process.env.GROQ_API_KEY,
+    };
+    const groqApiKeyForStage = groqKeyByStage[mode] || process.env.GROQ_API_KEY;
+    if (!groqApiKeyForStage) {
       throw new AppError("GROQ_API_KEY is not set but AI_MODEL is groq/*", 500, "AI_CONFIG_MISSING");
     }
-    return createGroqProvider(model);
+    return createGroqProvider(model, groqApiKeyForStage);
   }
 
   // 2026-08-31 (experimental, PM-approved): parallel evaluation path for

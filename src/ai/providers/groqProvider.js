@@ -1,10 +1,13 @@
-function createGroqProvider(model) {
+function createGroqProvider(model, apiKey) {
+  // 2026-09 (PM decision): apiKey اختیاری است تا سازگار با فراخوانی‌های
+  // قدیمی بماند -- اگر داده نشود، به GROQ_API_KEY عمومی برمی‌گردد.
+  const resolvedApiKey = apiKey || process.env.GROQ_API_KEY;
   return async function groqProviderFn({ system, user }) {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        Authorization: `Bearer ${resolvedApiKey}`,
         // 2026-07-22 permanent fix (AI team suggestion): some requests without
         // an explicit User-Agent were intermittently rejected with 403 by
         // Groq's edge/Cloudflare layer. Node's default fetch does not always
