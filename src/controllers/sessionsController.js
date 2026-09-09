@@ -158,20 +158,24 @@ async function generateSessionQuestions(req, res, next) {
         metadata: { from: 'S2_collecting_information', to: finalState, urgencyLevel, autoFinalized: isAutoFinalized, source: 'generate_questions' },
       });
 
+      // 2026-09 (PM decision): recordHistorySummary now runs regardless of
+      // isAutoFinalized -- doctor_review results were never entering
+      // PatientHistorySummary, causing stale "current complaint" displays.
+      try {
+        await recordHistorySummary({
+          userId: req.user.id,
+          sessionId,
+          presentingProblemId,
+          urgencyLevel,
+          reasoningSummary: triageResultJson?.reasoning,
+        });
+      } catch (historyErr) {
+      }
+
       if (isAutoFinalized) {
         try {
           await deductForCompletedTriage(req.user.id);
         } catch (walletErr) {
-        }
-        try {
-          await recordHistorySummary({
-            userId: req.user.id,
-            sessionId,
-            presentingProblemId,
-            urgencyLevel,
-            reasoningSummary: triageResultJson?.reasoning,
-          });
-        } catch (historyErr) {
         }
         try {
           await creditReferralIfApplicable(req.user.id);
@@ -339,22 +343,26 @@ async function submitSymptoms(req, res, next) {
       metadata: { from: 'S2_collecting_information', to: finalState, urgencyLevel, autoFinalized: isAutoFinalized },
     });
 
+    // 2026-09 (PM decision): recordHistorySummary now runs regardless of
+    // isAutoFinalized -- doctor_review results were never entering
+    // PatientHistorySummary, causing stale "current complaint" displays.
+    try {
+      await recordHistorySummary({
+        userId: req.user.id,
+        sessionId,
+        presentingProblemId,
+        urgencyLevel,
+        reasoningSummary: triageResultJson?.reasoning,
+      });
+    } catch (historyErr) {
+      // Best-effort: never let history-summary recording break the main flow.
+    }
+
     if (isAutoFinalized) {
       try {
         await deductForCompletedTriage(req.user.id);
       } catch (walletErr) {
         // Best-effort: never let wallet deduction break the main flow.
-      }
-      try {
-        await recordHistorySummary({
-          userId: req.user.id,
-          sessionId,
-          presentingProblemId,
-          urgencyLevel,
-          reasoningSummary: triageResultJson?.reasoning,
-        });
-      } catch (historyErr) {
-        // Best-effort: never let history-summary recording break the main flow.
       }
       try {
         await creditReferralIfApplicable(req.user.id);
@@ -650,22 +658,26 @@ async function secondRoundQuestions(req, res, next) {
         metadata: { from: 'S2_collecting_information', to: finalState, urgencyLevel, autoFinalized: isAutoFinalized, source: 'second_round' },
       });
 
+      // 2026-09 (PM decision): recordHistorySummary now runs regardless of
+      // isAutoFinalized -- doctor_review results were never entering
+      // PatientHistorySummary, causing stale "current complaint" displays.
+      try {
+        await recordHistorySummary({
+          userId: req.user.id,
+          sessionId,
+          presentingProblemId,
+          urgencyLevel,
+          reasoningSummary: triageResultJson?.reasoning,
+        });
+      } catch (historyErr) {
+        // Best-effort: never let history-summary recording break the main flow.
+      }
+
       if (isAutoFinalized) {
         try {
           await deductForCompletedTriage(req.user.id);
         } catch (walletErr) {
           // Best-effort: never let wallet deduction break the main flow.
-        }
-        try {
-          await recordHistorySummary({
-            userId: req.user.id,
-            sessionId,
-            presentingProblemId,
-            urgencyLevel,
-            reasoningSummary: triageResultJson?.reasoning,
-          });
-        } catch (historyErr) {
-          // Best-effort: never let history-summary recording break the main flow.
         }
         try {
           await creditReferralIfApplicable(req.user.id);
