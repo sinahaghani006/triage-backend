@@ -254,6 +254,12 @@ async function generateTriageQuestionsCore({
         throw err;
       }
       lastValidationError = err;
+      // 🔍 لاگ تشخیصی موقت (BUILD_TAG questions-language-artifact-debug-2026-09-09) --
+      // هدف: دیدن متن دقیق خطا (شامل کلمه‌ی محرک) برای LANGUAGE_ARTIFACT_DETECTED،
+      // نه فقط کد خطا. بعد از تحلیل باید حذف شود.
+      if (err.code === 'LANGUAGE_ARTIFACT_DETECTED') {
+        console.warn(`[LANG_ARTIFACT_DEBUG] attempt=${attempt} fullMessage=${err.message}`);
+      }
       // فقط لاگ برای مشاهده‌پذیری — بدون هیچ داده‌ی بیمار در پیام.
       if (attempt < MAX_ATTEMPTS) {
         console.warn(
