@@ -506,7 +506,11 @@ const ROUND2_DUPLICATE_SIMILARITY_THRESHOLD = 0.5;
 // to be against the SAME round-1 question that also has at least a modest
 // lexical relation to it (CONCEPT_DUPLICATE_MIN_SIMILARITY) -- not just
 // any concept overlap anywhere in the round-1 set.
-const CONCEPT_DUPLICATE_MIN_SIMILARITY = 0.2;
+// 2026-09 (PM decision, further loosened after evidence from a
+// successful real-world test with the 0.2 threshold): raised to 0.3 to
+// reduce false-positive duplicate rejections even further, while still
+// catching genuinely near-identical rephrasings.
+const CONCEPT_DUPLICATE_MIN_SIMILARITY = 0.3;
 
 function findDuplicateRound2QuestionIndexes(round1QuestionTexts, round2Questions) {
   const round1WordSets = (round1QuestionTexts || []).map(extractSignificantWords);
