@@ -35,7 +35,7 @@ async function listPatients(req, res, next) {
         sessions: {
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { presentingProblemId: true, doctorReviewStatus: true },
+          select: { presentingProblemId: true, doctorReviewStatus: true, currentState: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -50,6 +50,10 @@ async function listPatients(req, res, next) {
         phoneNumber: p.phoneNumber,
         doctorReviewStatus: latestSession?.doctorReviewStatus ?? null,
         presentingProblemId: latestSession?.presentingProblemId ?? null,
+        // 2026-09 (Frontend request): needed to distinguish S5 (genuinely
+        // pending doctor review) from S9 (auto-finalized) when
+        // doctorReviewStatus alone is ambiguous (both show "ai_completed").
+        currentState: latestSession?.currentState ?? null,
       };
     });
 
@@ -97,6 +101,11 @@ async function getPatientDetail(req, res, next) {
         medicalHistory: medicalHistory || null,
         doctorReviewStatus: latestSessionForStatus?.doctorReviewStatus ?? null,
         sessionId: latestSessionForStatus?.id ?? null,
+        // 2026-09 fix: previously absent -- Frontend had no direct field for
+        // the patient's current complaint and may have been reading a stale
+        // entry from triageHistory instead. Now sourced from the same
+        // already-queried latestSessionForStatus, consistent with listPatients.
+        presentingProblemId: latestSessionForStatus?.presentingProblemId ?? null,
         // 2026-08-22 fix (TASK 7 doc gap): Frontend had no way to know if
         // staff-finalize (S5-only) was allowed without this -- doctorReviewStatus
         // alone is ambiguous (ai_completed covers both S5 and auto-finalized S9).
