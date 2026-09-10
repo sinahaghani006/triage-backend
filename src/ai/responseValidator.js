@@ -496,6 +496,18 @@ const ROUND2_DUPLICATE_SIMILARITY_THRESHOLD = 0.5;
  * @param {Array<{questionText: string}>} round2Questions
  * @returns {number[]} ایندکس‌های (۰-پایه) سؤالات دور دوم که با یکی از سؤالات دور اول تکراری تشخیص داده شدند (لغوی یا مفهومی)
  */
+// 2026-09 (evidence-based fix, real production logs across 3 sessions):
+// pure concept overlap against ANY round-1 question -- regardless of real
+// lexical relation -- produced heavy false positives. A round-2 question
+// exploring a genuinely new clinical angle (e.g. urinary/GI symptoms) got
+// rejected just for sharing one keyword ("تب"/"ضعف") with an unrelated
+// round-1 question, even when Jaccard similarity was as low as 0.04-0.14.
+// Fix: concept-based duplicate detection now requires the shared concept
+// to be against the SAME round-1 question that also has at least a modest
+// lexical relation to it (CONCEPT_DUPLICATE_MIN_SIMILARITY) -- not just
+// any concept overlap anywhere in the round-1 set.
+const CONCEPT_DUPLICATE_MIN_SIMILARITY = 0.2;
+
 function findDuplicateRound2QuestionIndexes(round1QuestionTexts, round2Questions) {
   const round1WordSets = (round1QuestionTexts || []).map(extractSignificantWords);
   const round1ConceptSets = (round1QuestionTexts || []).map(findMatchingConcepts);
@@ -509,7 +521,10 @@ function findDuplicateRound2QuestionIndexes(round1QuestionTexts, round2Questions
     const isLexicalDuplicate = round1WordSets.some(
       (words1) => jaccardSimilarity(words1, words2) >= ROUND2_DUPLICATE_SIMILARITY_THRESHOLD
     );
-    const isConceptDuplicate = concepts2.size > 0 && round1ConceptSets.some((concepts1) => hasSharedConcept(concepts1, concepts2));
+    const isConceptDuplicate = concepts2.size > 0 && round1WordSets.some((words1, i) => {
+      if (!hasSharedConcept(round1ConceptSets[i], concepts2)) return false;
+      return jaccardSimilarity(words1, words2) >= CONCEPT_DUPLICATE_MIN_SIMILARITY;
+    });
 
     if (isLexicalDuplicate || isConceptDuplicate) duplicateIndexes.push(idx);
   });
