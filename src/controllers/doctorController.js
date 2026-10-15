@@ -35,7 +35,7 @@ async function listPatients(req, res, next) {
         sessions: {
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { presentingProblemId: true, doctorReviewStatus: true, currentState: true },
+          select: { presentingProblemId: true, doctorReviewStatus: true, currentState: true, visitNumber: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -54,6 +54,8 @@ async function listPatients(req, res, next) {
         // pending doctor review) from S9 (auto-finalized) when
         // doctorReviewStatus alone is ambiguous (both show "ai_completed").
         currentState: latestSession?.currentState ?? null,
+        // 2026-09 (PM request): human-friendly visit reference for the doctor panel.
+        displayVisitNumber: toDisplayVisitNumber(latestSession?.visitNumber),
       };
     });
 
@@ -106,6 +108,7 @@ async function getPatientDetail(req, res, next) {
         // entry from triageHistory instead. Now sourced from the same
         // already-queried latestSessionForStatus, consistent with listPatients.
         presentingProblemId: latestSessionForStatus?.presentingProblemId ?? null,
+        displayVisitNumber: toDisplayVisitNumber(latestSessionForStatus?.visitNumber),
         // 2026-08-22 fix (TASK 7 doc gap): Frontend had no way to know if
         // staff-finalize (S5-only) was allowed without this -- doctorReviewStatus
         // alone is ambiguous (ai_completed covers both S5 and auto-finalized S9).
@@ -264,6 +267,15 @@ async function updateReviewStatus(req, res, next) {
   } catch (err) {
     return next(err);
   }
+}
+
+// 2026-09 (PM request): human-friendly visit number for the doctor/admin
+// panels, starting at 100. Derived from the real autoincrement visitNumber,
+// so no extra column or sync logic. May have gaps (DB sequences skip values
+// on rolled-back inserts). If the offset ever changes, change it here only.
+const DISPLAY_VISIT_NUMBER_OFFSET = 99;
+function toDisplayVisitNumber(visitNumber) {
+  return typeof visitNumber === "number" ? visitNumber + DISPLAY_VISIT_NUMBER_OFFSET : null;
 }
 
 module.exports = { listPatients, getPatientDetail, getAiAssistant, updateReviewStatus };
